@@ -1,0 +1,12 @@
+CREATE TABLE planner_meta (id INTEGER PRIMARY KEY CHECK(id=1), generation INTEGER NOT NULL, doc TEXT NOT NULL);
+INSERT INTO planner_meta VALUES (1,0,'{}');
+CREATE TABLE planner_records(kind TEXT NOT NULL,rid TEXT NOT NULL,local_date TEXT,doc TEXT NOT NULL,PRIMARY KEY(kind,rid));
+CREATE INDEX records_date ON planner_records(kind,local_date);
+CREATE TABLE planner_ops(id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL);
+CREATE TABLE revision_guard(ok INTEGER NOT NULL CHECK(ok=1));
+CREATE TABLE restore_history(id TEXT PRIMARY KEY,created TEXT NOT NULL,doc TEXT NOT NULL);
+CREATE TABLE calendar_jobs(kind TEXT NOT NULL,rid TEXT NOT NULL,id TEXT NOT NULL UNIQUE,doc TEXT NOT NULL,PRIMARY KEY(kind,rid));
+CREATE TABLE calendar_links(kind TEXT NOT NULL,rid TEXT NOT NULL,event_id TEXT,calendar_id TEXT,hash TEXT NOT NULL,PRIMARY KEY(kind,rid));
+CREATE TABLE bridge_requests(id TEXT PRIMARY KEY,kind TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',result TEXT,created INTEGER NOT NULL);
+CREATE INDEX bridge_pending ON bridge_requests(status,created);
+CREATE TABLE restore_records(backup_id TEXT NOT NULL,kind TEXT NOT NULL,rid TEXT NOT NULL,doc TEXT NOT NULL,PRIMARY KEY(backup_id,kind,rid));

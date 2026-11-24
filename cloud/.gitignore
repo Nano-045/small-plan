@@ -1,0 +1,6 @@
+node_modules/
+.wrangler/
+domain/.wrangler/
+domain/generated/
+__pycache__/
+.dev.vars*

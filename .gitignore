@@ -1,0 +1,40 @@
+# Local records, backups and credentials / 本机记录、备份与凭证
+data/
+.env
+.env.*
+!.env.example
+.dev.vars*
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+*.db-wal
+*.db-shm
+*.pem
+*.key
+*.p12
+*.pfx
+*.p8
+
+# Runtime and build output / 运行及构建产物
+__pycache__/
+*.pyc
+.DS_Store
+node_modules/
+.pnpm-store/
+.venv/
+venv/
+cloud/.wrangler/
+native/.build/
+*.log
+.Rhistory
+.RData
+
+# Personal screenshots and review scratch files stay local.
+# 包含个人信息的截图及临时审查文件仅保留在本机。
+/docs/screenshots/
+/docs/reviews/*.diff
+/small-plan-daily-preview.png
