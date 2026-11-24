@@ -25,7 +25,7 @@ Open **[Small Plan locally](http://127.0.0.1:8765/)**. On macOS, you can also do
 | Planner | Focus, Todo and deadlines on the left; a 24-hour day/week/month calendar in the center; grouped routines and the Weekly Tracker on the right |
 | Overview | Monthly category-dot matrix, 10-minute activity cells, category shares, daily/weekly trends and previous-month comparison; planned time stays separate |
 | Study | Courses, assessments, effort estimates, CSV/ICS imports, private subscriptions and scheduling suggestions that require confirmation |
-| Career | Existing application records, job digests and follow-ups; turn a source item into a daily task |
+| Career | Collapsible groups for opportunities, follow-ups and application progress, with counts and remembered open/closed state; turn a source item into a daily task |
 | Radar | Rule-ranked RSS/GitHub picks with original links, publication/collection times and an archive |
 | Insights | Local Apple Health imports, daily energy/stress check-ins, data coverage and exploratory associations |
 | Settings | Apple Calendar, pending sync, timer history, backup/restore, exports and AI status |
@@ -155,7 +155,7 @@ python3 server.py --open
 | Planner | 左边 Focus／Todo／截止日期，中间日周月日历，右边分组 routines 和 Weekly Tracker |
 | Overview | 月度圆点矩阵、实际活动的 10 分钟色块、分类占比与日／周趋势、上月对比；计划时间单列 |
 | Study | 课程、作业、预计工作量、CSV／ICS 导入、私有订阅与确认式排程 |
-| Career | 现有投递记录、岗位摘要、跟进事项；从来源创建当日任务 |
+| Career | 待考虑岗位、待跟进、投递进度三个可折叠分组，显示数量并记住展开状态；从来源创建当日任务 |
 | Radar | RSS／GitHub 规则精选、原始链接、发布／采集时间与资料列表 |
 | Insights | 本机 Apple Health 导入、每日精力／压力自评、覆盖率与探索性关联 |
 | Settings | Apple Calendar、待同步队列、计时历史、备份恢复、导出与 AI 状态 |

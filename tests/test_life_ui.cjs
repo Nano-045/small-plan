@@ -29,8 +29,8 @@ test('offline timer projects four transitions using original timestamps without 
     assert.equal(sessions.length, 0);
 });
 const vm = require('node:vm');
-function dashboardHarness(routes = {}, statuses = {}) {
-    const listeners = {}, storage = new Map(), elements = {}, requests = [], errors = [];
+function dashboardHarness(routes = {}, statuses = {}, initialStorage = {}) {
+    const listeners = {}, storage = new Map(Object.entries(initialStorage)), elements = {}, requests = [], errors = [];
     const makeElement = () => ({
         innerHTML: '', dataset: {}, open: false, classList: { add() {
             }, remove() {
@@ -317,4 +317,53 @@ test('Career shows recent digest jobs then nearest scheduled followups then appl
  assert.deepEqual([...html.matchAll(/<article class="feed"><small>[^<]*<\/small><h3>([^<]+)<\/h3>/g)].map(match=>match[1]),['Latest digest','Older digest','Nearest followup','Later followup','Old application']);
  assert.match(html,/记录日期 2026-09-18/);assert.match(html,/Interview/);assert.match(html,/读取 2026-11-23/);
  await h.click('nav','radar');assert.match(h.elements['#app'].innerHTML,/更新 2026-11-20/);assert.match(h.elements['#app'].innerHTML,/发布 2026-11-22/);
+});
+
+function careerSections(html) {
+ return [...html.matchAll(/<details\b([^>]*\bdata-career-group="([^"]+)"[^>]*)>([\s\S]*?)<\/details>/g)]
+  .map(([,attributes,id,body])=>({id,open:/\bopen(?:\s|$|=)/.test(attributes),body,
+   titles:[...body.matchAll(/<h3>([^<]+)<\/h3>/g)].map(m=>m[1])}));
+}
+test('Career separates recommendations, upcoming followups and progress without losing history or treating applied digest jobs as new',async()=>{
+ const h=dashboardHarness();await h.settle();
+ const row=(id,kind,source_id,extra={})=>({id,title:id,kind,source_id,source:'career-ops',fetched_at:'2026-11-24',...extra});
+ h.saved.external_items=[
+  row('Earlier recommendation','job','digest:old',{published_at:'2026-11-20'}),
+  row('Recent recommendation','job','digest:new',{published_at:'2026-11-23'}),
+  row('Later followup','followup','followup-next:2',{deadline:'2026-12-03',status:'Scheduled'}),
+  row('Next followup','followup','followup-next:1',{deadline:'2026-11-25',status:'Scheduled'}),
+  row('Submitted application','job','application:1',{status:'Applied',published_at:'2026-11-22'}),
+  row('Already applied digest','job','digest:applied',{status:'Applied',published_at:'2026-11-21'}),
+  row('Past followup','followup','followup-log:1',{status:'Logged',published_at:'2026-11-19'}),
+  row('Hidden news','news','news:1')
+ ];
+ await h.click('nav','career');const groups=careerSections(h.elements['#app'].innerHTML);
+ assert.deepEqual(groups.map(g=>[g.id,g.titles]),[
+  ['opportunities',['Recent recommendation','Earlier recommendation']],
+  ['followups',['Next followup','Later followup']],
+  ['progress',['Submitted application','Already applied digest','Past followup']]
+ ]);
+ assert.ok(groups.every(g=>!g.open),'Groups should initially show a compact overview.');
+ assert.doesNotMatch(h.elements['#app'].innerHTML,/Hidden news/);
+});
+test('Career disclosure choices survive task actions, navigation and reload independently without writing planner records',async()=>{
+ const h=dashboardHarness();await h.settle();await h.click('nav','career');
+ assert.equal(careerSections(h.elements['#app'].innerHTML).length,3);
+ const toggle=(id,open,attached=true)=>{
+  const target={dataset:{careerGroup:id},open};
+  h.elements['#app'].contains=node=>attached && node===target;
+  h.listeners.toggle({target});
+ };
+ const writes=()=>h.requests.filter(r=>r.path==='/api/v2/commands');
+ toggle('opportunities',true);toggle('followups',true);toggle('opportunities',false);
+ toggle('progress',true,false); // A queued event from a replaced DOM must not change the saved choice.
+ assert.equal(writes().length,0);
+ await h.click('external-task','job-to-plan');
+ assert.deepEqual(writes().map(r=>[r.body.type,r.body.payload.id]),[['external.add_task','job-to-plan']]);
+ assert.deepEqual(careerSections(h.elements['#app'].innerHTML).map(g=>g.open),[false,true,false]);
+ await h.click('nav','planner');await h.click('nav','career');
+ assert.deepEqual(careerSections(h.elements['#app'].innerHTML).map(g=>g.open),[false,true,false]);
+ const restarted=dashboardHarness({}, {}, Object.fromEntries(h.storage));
+ await restarted.settle();await restarted.click('nav','career');
+ assert.deepEqual(careerSections(restarted.elements['#app'].innerHTML).map(g=>g.open),[false,true,false]);
 });

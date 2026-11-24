@@ -8,6 +8,17 @@
     const pages = {
         planner: 'Planner', overview: 'Overview', study: 'Study', career: 'Career', radar: 'Radar', insights: 'Insights', settings: 'Settings'
     };
+    const careerGroups = [
+        { id: 'opportunities', title: '待考虑岗位', description: '每日摘要中的候选岗位，先筛选，再加入当日任务。', empty: '暂时没有待考虑的岗位。' },
+        { id: 'followups', title: '待跟进', description: '按跟进日期排列，查看接下来需要联系或确认的事项。', empty: '暂时没有已安排日期的跟进提醒。' },
+        { id: 'progress', title: '投递进度', description: '投递状态与跟进历史；状态请在 career-ops 中更新。', empty: '暂时没有投递或历史跟进记录。' }
+    ];
+    const careerOpenKey = 'small-plan-career-sections', careerOpen = {};
+    try {
+        const saved = JSON.parse(localStorage.getItem(careerOpenKey) || '{}');
+        for (const group of careerGroups)
+            if (typeof saved?.[group.id] === 'boolean') careerOpen[group.id] = saved[group.id];
+    } catch { /* Disclosures still work when browser storage is unavailable. */ }
     const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
     let date = today(), page = 'planner', view = 'week', mobile = 'today', state, notice = '', locked = false, formHandler, proposal, discoveryJob, discovering = false, discoveryMessage = '';
     let cacheUnavailable=false;
@@ -358,35 +369,64 @@
             + (subscriptions || empty(aux.study?.message || (aux.loading ? '正在读取订阅…' : '暂无课程日历订阅。'))) + '</section></div>';
     }
     function feedCard(item,picked=false) {
+        const career = ['job','followup'].includes(item.kind);
+        const label = career ? (item.kind==='followup'
+            ? item.source_id?.startsWith('followup-log:') || item.status==='Logged' ? '跟进记录' : '跟进提醒'
+            : item.source_id?.startsWith('digest:') ? '岗位推荐' : '投递记录')+' · '+item.source : item.source+' · '+item.kind;
+        const statusNames = { applied:'已投递', rejected:'未通过', interview:'面试中', interviewing:'面试中', offer:'已收到 Offer',
+            scheduled:'待跟进', logged:'已记录', recommended:'待考虑', withdrawn:'已撤回', closed:'已结束', hired:'已录用' };
+        const translated = career && statusNames[String(item.status || '').toLowerCase()];
+        const status = translated ? translated+' · '+item.status : item.status;
+        const sourceSummaries = ['Application tracker','Internship digest','Follow-up history','Scheduled follow-up'];
+        const summary = career && sourceSummaries.includes(item.summary) ? '' : item.summary;
+        const sourceReasons = ['Listed in the Career Ops source of truth.','Recorded in Career Ops.','Career Ops has an explicit next date.'];
+        const explanation = career && sourceReasons.includes(item.reason) ? '' : item.reason;
         const topics=picked ? D.radarTopics(item) : [];
         const dateLabel=item.source==='career-ops' || ['job','followup'].includes(item.kind) ? '记录日期' : item.kind==='repository' ? '更新' : '发布';
         const times=[[dateLabel,item.published_at],['读取',item.fetched_at]].filter(([,value])=>value)
             .map(([label,value])=>label+' '+(Number.isFinite(Date.parse(value)) && String(value).length>10 ? D.wall(value) : value)).join(' · ');
         const reason=picked ? '<p class="meta">精选依据 · '+esc(topics.length ? topics.join('、')+'，按日期排序' : '按日期排序')+'</p>' : '';
-        return '<article class="feed"><small>'+esc(item.source)+' · '+esc(item.kind)+'</small><h3>'+esc(item.title)+'</h3>'
-            +(times?'<small>'+esc(times)+'</small>':'')+'<p>'+esc(item.summary||'')+'</p>'+reason
-            +(item.reason && item.reason!==item.summary?'<p>'+esc(item.reason)+'</p>':'')
-            +(item.status||item.deadline?'<p>'+esc([item.status,item.deadline].filter(Boolean).join(' · '))+'</p>':'')
+        return '<article class="feed"><small>'+esc(label)+'</small><h3>'+esc(item.title)+'</h3>'
+            +(times?'<small>'+esc(times)+'</small>':'')+(summary?'<p>'+esc(summary)+'</p>':'')+reason
+            +(explanation && explanation!==summary?'<p>'+esc(explanation)+'</p>':'')
+            +(status||item.deadline?'<p>'+esc([status,item.deadline && (career ? (item.kind==='followup'?'跟进日期 ':'截止日期 ') : '')+item.deadline].filter(Boolean).join(' · '))+'</p>':'')
             +'<div class="actions">'+(/^https?:\/\//i.test(item.url)?'<a target="_blank" rel="noopener noreferrer"'+attr('href',item.url)+'>查看来源 ↗</a>':'')
             +btn('external-task','加入当日任务',item.id)+'</div></article>';
     }
+    function careerFeed(rows) {
+        const groups = Object.fromEntries(careerGroups.map(group=>[group.id,[]]));
+        const progressed = new Set(['applied','rejected','interview','interviewing','offer','withdrawn','closed','hired']);
+        for (const item of rows) {
+            const status=String(item.status || '').trim().toLowerCase();
+            const group=item.kind==='followup'
+                ? item.deadline && !item.source_id?.startsWith('followup-log:') && status!=='logged' ? 'followups' : 'progress'
+                : item.source_id?.startsWith('digest:') && !progressed.has(status) ? 'opportunities' : 'progress';
+            groups[group].push(item);
+        }
+        const recorded=item=>Date.parse(item.published_at||item.fetched_at)||0;
+        const sections=careerGroups.map(group=>{
+            const items=groups[group.id].sort((a,b)=>group.id==='followups'
+                ? a.deadline.localeCompare(b.deadline) : recorded(b)-recorded(a));
+            return '<details class="career-group"'+attr('data-career-group',group.id)+(careerOpen[group.id]?' open':'')+'>'
+                +'<summary><span class="career-chevron" aria-hidden="true">▶</span><span class="career-group-heading">'
+                +'<strong>'+group.title+'</strong><small>'+group.description+'</small></span>'
+                +'<span class="career-count"'+attr('aria-label',items.length+' 条')+'>'+items.length+'</span></summary>'
+                +'<div class="career-group-content">'+(items.map(item=>feedCard(item)).join('')||empty(group.empty))+'</div></details>';
+        }).join('');
+        return '<section class="card career-inbox">'+heading('求职总览',btn('refresh-feed','刷新来源'))
+            +'<p class="career-intro">点击三角形或类别标题展开／收起列表。同一岗位可能同时有投递记录和跟进提醒。</p>'
+            +(aux.loading?empty('正在读取来源状态…'):'')+(aux.integrationText?empty(aux.integrationText):'')+sections+'</section>';
+    }
     function feed() {
         const career=page==='career',rows=state.external_items.filter(i=>career?['job','followup'].includes(i.kind):['news','repository'].includes(i.kind));
-        if (career) {
-            const section=item=>item.kind==='job' && item.source_id?.startsWith('digest:') ? 0
-                : item.kind==='followup' && item.deadline && !item.source_id?.startsWith('followup-log:') ? 1 : 2;
-            const recorded=item=>Date.parse(item.published_at||item.fetched_at)||0;
-            rows.sort((a,b)=>section(a)-section(b) || (section(a)===1
-                ? a.deadline.localeCompare(b.deadline) : recorded(b)-recorded(a)));
-        }
-        const {picks,rest}=career?{picks:[],rest:[]}:D.radarPicks(rows,date);
-        const articles=career ? rows.map(i=>feedCard(i)).join('') || empty('暂无职业事项。刷新以读取 career-ops。')
-            : '<h3>每日精选 · '+esc(date)+'</h3><p class="meta">从当日读取的内容中，优先选择发布日期较近的条目；同日优先数据分析和 AI 主题。缺少发布日期时使用读取日期。</p>'
+        if (career) return careerFeed(rows);
+        const {picks,rest}=D.radarPicks(rows,date);
+        const articles='<h3>每日精选 · '+esc(date)+'</h3><p class="meta">从当日读取的内容中，优先选择发布日期较近的条目；同日优先数据分析和 AI 主题。缺少发布日期时使用读取日期。</p>'
                 +(picks.map(i=>feedCard(i,true)).join('') || empty('当天没有读取到可精选的内容。'))
                 +'<details class="feed"><summary>资料列表 · '+rest.length+'</summary>'
                 +(rest.map(i=>feedCard(i)).join('')||empty('没有其他已保存条目。'))+'</details>';
-        return '<section class="card">'+heading(career?'Career inbox':'Radar feed',btn('refresh-feed','刷新来源'))
-            +(!career && aux.radarSummary?'<details class="feed"><summary>已保存的 Radar 摘要</summary><p class="note">'+esc(aux.radarSummary)+'</p></details>':'')
+        return '<section class="card">'+heading('Radar feed',btn('refresh-feed','刷新来源'))
+            +(aux.radarSummary?'<details class="feed"><summary>已保存的 Radar 摘要</summary><p class="note">'+esc(aux.radarSummary)+'</p></details>':'')
             +(aux.loading?empty('正在读取来源状态…'):'')+(aux.integrationText?empty(aux.integrationText):'')+articles+'</section>';
     }
     function insights() {
@@ -1008,6 +1048,12 @@
             locked = false;
         }
     });
+    document.addEventListener('toggle', e => {
+        const target=e.target, id=target?.dataset?.careerGroup;
+        if (!careerGroups.some(group=>group.id===id) || !app.contains(target)) return;
+        careerOpen[id]=target.open;
+        try { localStorage.setItem(careerOpenKey,JSON.stringify(careerOpen)); } catch { /* Keep the current page usable. */ }
+    }, true);
     document.addEventListener('click', async (e) => {
         if (Date.now() < suppressClickUntil)
             return;
