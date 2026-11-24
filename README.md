@@ -1,128 +1,8 @@
 # Small Plan
 
-**以日历为中心的个人生活面板 · A calendar-centered personal life dashboard**
+**A calendar-centered personal life dashboard · 以日历为中心的个人生活面板**
 
-[中文说明](#中文说明) · [English guide](#english-guide)
-
-## 中文说明
-
-以日历为中心的个人生活面板。任务、课程、惯例、计时与复盘在同一个界面；Career 复用已有 career-ops；健康数据只在本机处理。默认单用户、周一开始、Australia/Melbourne 时区。
-
-### 打开
-
-**[打开 Small Plan](http://127.0.0.1:8765/)**
-
-双击 `Start Small Plan.command`，保持终端运行。也可以在本目录执行：
-
-```sh
-python3 server.py --open
-```
-
-在启动服务的终端按 Control-C 停止；重新启动后数据保留。Mac 休眠或服务停止时连接器暂停。localhost 只能在这台 Mac 使用。端口被其他应用占用时不会先迁移数据库。
-
-### 日常操作
-
-| 页面 | 功能 |
-| --- | --- |
-| Planner | 左边 Focus／Todo／截止日期，中间日周月日历，右边分组 routines 和 Weekly Tracker |
-| Overview | 月度圆点矩阵、实际活动的 10 分钟色块、分类占比与日／周趋势、上月对比；计划时间单列 |
-| Study | 课程、作业、预计工作量、CSV／ICS 导入、私有订阅与确认式排程 |
-| Career | 现有投递记录、岗位摘要、跟进事项；从来源创建当日任务 |
-| Radar | RSS／GitHub 规则精选、原始链接、发布／采集时间与资料列表 |
-| Insights | 本机 Apple Health 导入、每日精力／压力自评、覆盖率与探索性关联 |
-| Settings | Apple Calendar、待同步队列、计时历史、备份恢复、导出与 AI 状态 |
-
-**安排任务／routine**：拖住每行持续显示的 `⠿` 到日历，或点「安排」填写日期和起止时间。拖动按 15 分钟吸附，表单支持精确分钟、全天 24 小时与跨午夜。拖时间块可改期，底边可调整时长。Todo 可有多个时间块；同一天的 routine 重复安排会更新已有块。
-
-**圆点**：每项 routine 单独勾选。类别圆点只计算当天应做的 routines，全部完成才填实，部分完成显示进度；跳过不算完成，没有应做项显示短横。点击类别圆点展开明细。普通 Todo 不改变这个完成率。迁移前保留旧版手动圆点，历史只读。分类／重复规则修改影响之后生成的实例，已生成的当天和过去记录保留快照。
-
-**计时**：任务、routine 和类别旁均可开始；顶栏暂停／继续／结束。同一时间只允许一个活动。结束先保存实际时段，再单独询问是否完成任务。刷新可恢复，暂停不计时；超过 6 小时的异常长记录要先校对才计入统计和同步。实际时长保留到秒。「未记录」只代表没有实际记录。
-
-**断网**：已打开页面的计时操作保留时间戳和操作 ID，重连逐条同步并显示冲突。服务停止时不能重新打开网页；本版不承诺完整多设备离线编辑。不要清除待同步计时所在的浏览器存储。
-
-### Apple Calendar
-
-Settings →「选择日历」→ 完成 macOS 授权 → 选择要读取的日历及可写 iCloud 来源 → 保存 →「立即同步」。系统完整授权比应用使用范围更宽：应用只读取选中的日历，只修改自己创建且有所有权记录的事件。
-
-- `Small Plan · Plan`：已确认的安排。
-- `Small Plan · Actual`：已结束且通过校对的实际活动，暂停前后分段保存。在 Calflow 中仅选择 Actual 分析真实投入。
-- 外部日历只读，自己的两本日历排除导入，避免重复展示。
-- 未配置、离线、权限拒绝和写入失败均保留队列。重试更新同一事件。
-- 受管理事件在 Apple Calendar 被修改时保留冲突。Settings 显示双方内容；只有确认「以 Small Plan 为准」才排队处理。远端再次变化会重新要求确认。丢失所有权、移动到其他日历或标记异常不能强制覆盖。
-
-本机在线时每分钟处理同步。辅助程序需 Xcode Command Line Tools；`sh native/build.sh` 可独立构建。**保留 `native/.build/owned-calendars.json`**，这是已创建日历的所有权凭证，重新构建不会删除它。原生协议与构建已测试；真实授权及 iCloud 创建／修改／删除／重试仍需授权后的实际试用。
-
-ICS 导出和 `/calendar.ics` 仍可使用，但不是 EventKit 的 iCloud 写入机制。启用原生同步后避免同时订阅相同计划，否则会重复展示。
-
-### 数据来源
-
-Career 只读现有 career-ops 的 `data/applications.md`、每日结构化摘要及跟进文件；不另建投递状态、不更改原网站、不发送邮件。服务在线时检测文件变化。请继续在原 career-ops 网站维护状态；加入当日任务不会标记 Applied。
-
-默认来源为 `integrations.py` 中的 `~/Library/Mobile Documents/com~apple~CloudDocs/career 2026/career-ops`；在其他电脑使用时请改成自己的目录。仓库不包含求职记录。
-
-Radar 每日获取公开 RSS／Atom 与 GitHub，默认 Hugging Face 博客及相关 data-science 仓库。按日期和关键词筛选，精选最多五条、GitHub 最多两项，其余保留在资料列表。来源错误保留旧结果。不使用 AI 也能工作。
-
-Study 支持手动录入、CSV、非重复 ICS 截止事项及私有 ICS 订阅。CSV 示例：
-
-```csv
-title,due_at,estimate_minutes,source_id
-Assignment 1,2026-12-03T17:00:00+11:00,180,course-a-assignment-1
-```
-
-`estimate_minutes` 和 `source_id` 可省略。ICS 支持 VEVENT／带日期 VTODO、UTC、IANA 时区、取消记录；重复规则会明确拒绝，请提供展开后的截止清单。每次最多 500 项、2 MB。私有订阅链接只留在 Mac，不进入普通备份或云端。订阅每日检查，截止日期改变会提示，已有安排不移动。
-
-排程建议默认使用 09:00–18:00 空闲时段的最多 70%，根据截止日期、优先级与预计工作量排序，避开已有安排和外部约会。只在接受后写入，并再次检查冲突。
-
-### 本机健康分析
-
-在 iPhone 健康 App 导出 ZIP／XML，传到 Mac，在 Insights →「导入 Apple Health」输入本机文件绝对路径。支持睡眠、静息心率、HRV SDNN、步数、活动与运动；去重、不累加重复设备来源，缺失不算零。
-
-数据保存在 `data/local-health/health.sqlite3`。健康记录、自评、汇总和分析结果不进入普通 JSON、ICS、Markdown、AI 或本应用云端同步。观察窗口为 28 天，不足 14 个有效配对日只展示描述性结果。关联不代表因果。Insights 在没有 Watch 数据时也会描述近 7 天的时间记录、惯例执行与课程／求职截止事项；不会把时间记录比例当成完成率。当前没有诊断评分、自动 Watch 采集或 RR 心搏分析，后续需真实设备验证。
-
-### 可选 AI 与费用
-
-日常规划、统计、规则排程、RSS 和 GitHub 不需要模型。**AI 默认关闭。** ChatGPT 订阅不作为应用 API 凭证。
-
-核实赠送额度与账号计费条件后，才可按 [AI 配置说明](docs/AI_SETUP.md) 配置。只有手动点击摘要按钮才调用，内容缓存，最多每日／每周各一次；无自动重试或付费回退。每月上限 US$3，另有跨月累计赠送额度上限。健康数据不进入摘要。应用无法读取提供商真实账单，账号计费条件必须独立确认。
-
-### 备份与回退
-
-| 位置 | 内容 |
-| --- | --- |
-| `data/planner.sqlite3` | 本机规划数据库 |
-| `data/backups/` | 升级／恢复前的备份和升级前源码 |
-| `data/private/` | 私有订阅、AI 配置和预算账本，不导出 |
-| `data/local-health/` | 独立健康库，需在本机另行备份 |
-| `data/cloud-cache/` | 之后切换云端时的只读规划缓存 |
-| `native/.build/owned-calendars.json` | 日历所有权映射，迁移 Mac 时保留 |
-
-Settings 的 JSON 备份保留普通规划数据，兼容旧版 JSON；恢复前自动备份。旧整库 PUT 已停用，避免旧页面覆盖新字段。SQLite 升级保留原始任务、习惯、笔记和历史打卡。
-
-回退先停止服务，保存当前数据库及其 WAL 文件、导出当前 JSON，再从对应升级前源码存档和数据库备份恢复。不要把新版数据库交给旧版服务，不要覆盖运行中的数据库。旧备份之后的编辑不会自动保留。
-
-### 云端准备
-
-`cloud/` 包含 TypeScript Worker＋D1 和 Cloudflare Access 验证；`cloud_bridge.py` 由 Mac 主动连接处理系统接口。切换后 D1 是唯一可编辑主库。按部署说明以 `--cache-planner` 启动桥接程序，会在验证缓存后锁定 Mac 计划编辑；本机健康分析读取云端缓存。缓存丢失不会退回旧的可编辑数据库，健康仍留本机。
-
-**尚未发布云端地址。** 按计划先本机连续试用一周，再核验登录、免费配额、手机访问、Mac 连接和数据迁移。部署与回退步骤见 [云端实施说明](cloud/IMPLEMENTATION_REPORT.md)。
-
-### 验证
-
-Python 3.9+ 标准库；本机网页不需 npm 构建。云端工具需 Node 24 与 pnpm。
-
-```sh
-python3 -m unittest discover -s tests -v
-node --test tests/test_life_ui.cjs tests/test_drag.cjs
-sh native/build.sh --test
-```
-
-在 `cloud` 目录执行 `pnpm install --frozen-lockfile`、`pnpm typecheck`、`WRANGLER_SEND_METRICS=false pnpm test`、`WRANGLER_SEND_METRICS=false pnpm dry-run`。测试使用临时数据库，不操作真实日历。实现约定见 [LIFE_IMPLEMENTATION.md](docs/LIFE_IMPLEMENTATION.md)，结果见 [IMPLEMENTATION_PROGRESS.md](docs/IMPLEMENTATION_PROGRESS.md)。
-
-### 仓库内容与隐私
-
-仓库包含源码、测试、数据库迁移和产品／实施文档。`data/`、数据库、备份、密钥、依赖缓存、原生构建产物、个人截图及终端历史不上传；规则见 [.gitignore](.gitignore)。首次克隆启动会创建独立的新数据库，不含原使用者的任务、求职记录或健康数据。
-
-公开 GitHub 仓库仅用于保存和分享项目源码，不等于已经部署网站。网页仍需本机启动；跨设备使用需完成上述云端部署。
+[English guide](#english-guide) · [中文说明](#中文说明)
 
 ## English guide
 
@@ -251,3 +131,123 @@ Read the [product specification](PRODUCT_SPEC.md), [implementation contract](doc
 This repository contains source, tests, migrations and product/implementation documentation. [`.gitignore`](.gitignore) excludes local databases, backups, credentials, dependency caches, native build output, personal screenshots and shell history. A fresh clone creates a new database without the original user's tasks, career records or health data.
 
 A public GitHub repository shares the source; it does not host the running dashboard. Start the local server to use it on your Mac, or complete the separate cloud deployment for access from other devices.
+
+## 中文说明
+
+以日历为中心的个人生活面板。任务、课程、惯例、计时与复盘在同一个界面；Career 复用已有 career-ops；健康数据只在本机处理。默认单用户、周一开始、Australia/Melbourne 时区。
+
+### 打开
+
+**[打开 Small Plan](http://127.0.0.1:8765/)**
+
+双击 `Start Small Plan.command`，保持终端运行。也可以在本目录执行：
+
+```sh
+python3 server.py --open
+```
+
+在启动服务的终端按 Control-C 停止；重新启动后数据保留。Mac 休眠或服务停止时连接器暂停。localhost 只能在这台 Mac 使用。端口被其他应用占用时不会先迁移数据库。
+
+### 日常操作
+
+| 页面 | 功能 |
+| --- | --- |
+| Planner | 左边 Focus／Todo／截止日期，中间日周月日历，右边分组 routines 和 Weekly Tracker |
+| Overview | 月度圆点矩阵、实际活动的 10 分钟色块、分类占比与日／周趋势、上月对比；计划时间单列 |
+| Study | 课程、作业、预计工作量、CSV／ICS 导入、私有订阅与确认式排程 |
+| Career | 现有投递记录、岗位摘要、跟进事项；从来源创建当日任务 |
+| Radar | RSS／GitHub 规则精选、原始链接、发布／采集时间与资料列表 |
+| Insights | 本机 Apple Health 导入、每日精力／压力自评、覆盖率与探索性关联 |
+| Settings | Apple Calendar、待同步队列、计时历史、备份恢复、导出与 AI 状态 |
+
+**安排任务／routine**：拖住每行持续显示的 `⠿` 到日历，或点「安排」填写日期和起止时间。拖动按 15 分钟吸附，表单支持精确分钟、全天 24 小时与跨午夜。拖时间块可改期，底边可调整时长。Todo 可有多个时间块；同一天的 routine 重复安排会更新已有块。
+
+**圆点**：每项 routine 单独勾选。类别圆点只计算当天应做的 routines，全部完成才填实，部分完成显示进度；跳过不算完成，没有应做项显示短横。点击类别圆点展开明细。普通 Todo 不改变这个完成率。迁移前保留旧版手动圆点，历史只读。分类／重复规则修改影响之后生成的实例，已生成的当天和过去记录保留快照。
+
+**计时**：任务、routine 和类别旁均可开始；顶栏暂停／继续／结束。同一时间只允许一个活动。结束先保存实际时段，再单独询问是否完成任务。刷新可恢复，暂停不计时；超过 6 小时的异常长记录要先校对才计入统计和同步。实际时长保留到秒。「未记录」只代表没有实际记录。
+
+**断网**：已打开页面的计时操作保留时间戳和操作 ID，重连逐条同步并显示冲突。服务停止时不能重新打开网页；本版不承诺完整多设备离线编辑。不要清除待同步计时所在的浏览器存储。
+
+### Apple Calendar
+
+Settings →「选择日历」→ 完成 macOS 授权 → 选择要读取的日历及可写 iCloud 来源 → 保存 →「立即同步」。系统完整授权比应用使用范围更宽：应用只读取选中的日历，只修改自己创建且有所有权记录的事件。
+
+- `Small Plan · Plan`：已确认的安排。
+- `Small Plan · Actual`：已结束且通过校对的实际活动，暂停前后分段保存。在 Calflow 中仅选择 Actual 分析真实投入。
+- 外部日历只读，自己的两本日历排除导入，避免重复展示。
+- 未配置、离线、权限拒绝和写入失败均保留队列。重试更新同一事件。
+- 受管理事件在 Apple Calendar 被修改时保留冲突。Settings 显示双方内容；只有确认「以 Small Plan 为准」才排队处理。远端再次变化会重新要求确认。丢失所有权、移动到其他日历或标记异常不能强制覆盖。
+
+本机在线时每分钟处理同步。辅助程序需 Xcode Command Line Tools；`sh native/build.sh` 可独立构建。**保留 `native/.build/owned-calendars.json`**，这是已创建日历的所有权凭证，重新构建不会删除它。原生协议与构建已测试；真实授权及 iCloud 创建／修改／删除／重试仍需授权后的实际试用。
+
+ICS 导出和 `/calendar.ics` 仍可使用，但不是 EventKit 的 iCloud 写入机制。启用原生同步后避免同时订阅相同计划，否则会重复展示。
+
+### 数据来源
+
+Career 只读现有 career-ops 的 `data/applications.md`、每日结构化摘要及跟进文件；不另建投递状态、不更改原网站、不发送邮件。服务在线时检测文件变化。请继续在原 career-ops 网站维护状态；加入当日任务不会标记 Applied。
+
+默认来源为 `integrations.py` 中的 `~/Library/Mobile Documents/com~apple~CloudDocs/career 2026/career-ops`；在其他电脑使用时请改成自己的目录。仓库不包含求职记录。
+
+Radar 每日获取公开 RSS／Atom 与 GitHub，默认 Hugging Face 博客及相关 data-science 仓库。按日期和关键词筛选，精选最多五条、GitHub 最多两项，其余保留在资料列表。来源错误保留旧结果。不使用 AI 也能工作。
+
+Study 支持手动录入、CSV、非重复 ICS 截止事项及私有 ICS 订阅。CSV 示例：
+
+```csv
+title,due_at,estimate_minutes,source_id
+Assignment 1,2026-12-03T17:00:00+11:00,180,course-a-assignment-1
+```
+
+`estimate_minutes` 和 `source_id` 可省略。ICS 支持 VEVENT／带日期 VTODO、UTC、IANA 时区、取消记录；重复规则会明确拒绝，请提供展开后的截止清单。每次最多 500 项、2 MB。私有订阅链接只留在 Mac，不进入普通备份或云端。订阅每日检查，截止日期改变会提示，已有安排不移动。
+
+排程建议默认使用 09:00–18:00 空闲时段的最多 70%，根据截止日期、优先级与预计工作量排序，避开已有安排和外部约会。只在接受后写入，并再次检查冲突。
+
+### 本机健康分析
+
+在 iPhone 健康 App 导出 ZIP／XML，传到 Mac，在 Insights →「导入 Apple Health」输入本机文件绝对路径。支持睡眠、静息心率、HRV SDNN、步数、活动与运动；去重、不累加重复设备来源，缺失不算零。
+
+数据保存在 `data/local-health/health.sqlite3`。健康记录、自评、汇总和分析结果不进入普通 JSON、ICS、Markdown、AI 或本应用云端同步。观察窗口为 28 天，不足 14 个有效配对日只展示描述性结果。关联不代表因果。Insights 在没有 Watch 数据时也会描述近 7 天的时间记录、惯例执行与课程／求职截止事项；不会把时间记录比例当成完成率。当前没有诊断评分、自动 Watch 采集或 RR 心搏分析，后续需真实设备验证。
+
+### 可选 AI 与费用
+
+日常规划、统计、规则排程、RSS 和 GitHub 不需要模型。**AI 默认关闭。** ChatGPT 订阅不作为应用 API 凭证。
+
+核实赠送额度与账号计费条件后，才可按 [AI 配置说明](docs/AI_SETUP.md) 配置。只有手动点击摘要按钮才调用，内容缓存，最多每日／每周各一次；无自动重试或付费回退。每月上限 US$3，另有跨月累计赠送额度上限。健康数据不进入摘要。应用无法读取提供商真实账单，账号计费条件必须独立确认。
+
+### 备份与回退
+
+| 位置 | 内容 |
+| --- | --- |
+| `data/planner.sqlite3` | 本机规划数据库 |
+| `data/backups/` | 升级／恢复前的备份和升级前源码 |
+| `data/private/` | 私有订阅、AI 配置和预算账本，不导出 |
+| `data/local-health/` | 独立健康库，需在本机另行备份 |
+| `data/cloud-cache/` | 之后切换云端时的只读规划缓存 |
+| `native/.build/owned-calendars.json` | 日历所有权映射，迁移 Mac 时保留 |
+
+Settings 的 JSON 备份保留普通规划数据，兼容旧版 JSON；恢复前自动备份。旧整库 PUT 已停用，避免旧页面覆盖新字段。SQLite 升级保留原始任务、习惯、笔记和历史打卡。
+
+回退先停止服务，保存当前数据库及其 WAL 文件、导出当前 JSON，再从对应升级前源码存档和数据库备份恢复。不要把新版数据库交给旧版服务，不要覆盖运行中的数据库。旧备份之后的编辑不会自动保留。
+
+### 云端准备
+
+`cloud/` 包含 TypeScript Worker＋D1 和 Cloudflare Access 验证；`cloud_bridge.py` 由 Mac 主动连接处理系统接口。切换后 D1 是唯一可编辑主库。按部署说明以 `--cache-planner` 启动桥接程序，会在验证缓存后锁定 Mac 计划编辑；本机健康分析读取云端缓存。缓存丢失不会退回旧的可编辑数据库，健康仍留本机。
+
+**尚未发布云端地址。** 按计划先本机连续试用一周，再核验登录、免费配额、手机访问、Mac 连接和数据迁移。部署与回退步骤见 [云端实施说明](cloud/IMPLEMENTATION_REPORT.md)。
+
+### 验证
+
+Python 3.9+ 标准库；本机网页不需 npm 构建。云端工具需 Node 24 与 pnpm。
+
+```sh
+python3 -m unittest discover -s tests -v
+node --test tests/test_life_ui.cjs tests/test_drag.cjs
+sh native/build.sh --test
+```
+
+在 `cloud` 目录执行 `pnpm install --frozen-lockfile`、`pnpm typecheck`、`WRANGLER_SEND_METRICS=false pnpm test`、`WRANGLER_SEND_METRICS=false pnpm dry-run`。测试使用临时数据库，不操作真实日历。实现约定见 [LIFE_IMPLEMENTATION.md](docs/LIFE_IMPLEMENTATION.md)，结果见 [IMPLEMENTATION_PROGRESS.md](docs/IMPLEMENTATION_PROGRESS.md)。
+
+### 仓库内容与隐私
+
+仓库包含源码、测试、数据库迁移和产品／实施文档。`data/`、数据库、备份、密钥、依赖缓存、原生构建产物、个人截图及终端历史不上传；规则见 [.gitignore](.gitignore)。首次克隆启动会创建独立的新数据库，不含原使用者的任务、求职记录或健康数据。
+
+公开 GitHub 仓库仅用于保存和分享项目源码，不等于已经部署网站。网页仍需本机启动；跨设备使用需完成上述云端部署。
