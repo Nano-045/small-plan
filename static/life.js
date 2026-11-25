@@ -6,10 +6,10 @@
     const color = value => /^#[a-f0-9]{3,8}$/i.test(value) ? value : '#75866c';
     const short = (date, opts = { month: 'short', day: 'numeric' }) => new Intl.DateTimeFormat('en-AU', { ...opts, timeZone: 'UTC' }).format(new Date(date + 'T12:00Z'));
     const pages = {
-        planner: 'Planner', overview: 'Overview', study: 'Study', career: 'Career', radar: 'Radar', insights: 'Insights', settings: 'Settings'
+        overview: 'Overview', study: 'Study', career: 'Career', radar: 'Radar', insights: 'Insights', settings: 'Settings'
     };
     const careerGroups = [
-        { id: 'opportunities', title: '待考虑岗位', description: '每日摘要中的候选岗位，先筛选，再加入当日任务。', empty: '暂时没有待考虑的岗位。' },
+        { id: 'opportunities', title: '待考虑岗位', description: '每日摘要中的候选岗位，展开查看并打开原始来源。', empty: '暂时没有待考虑的岗位。' },
         { id: 'followups', title: '待跟进', description: '按跟进日期排列，查看接下来需要联系或确认的事项。', empty: '暂时没有已安排日期的跟进提醒。' },
         { id: 'progress', title: '投递进度', description: '投递状态与跟进历史；状态请在 career-ops 中更新。', empty: '暂时没有投递或历史跟进记录。' }
     ];
@@ -19,11 +19,18 @@
         for (const group of careerGroups)
             if (typeof saved?.[group.id] === 'boolean') careerOpen[group.id] = saved[group.id];
     } catch { /* Disclosures still work when browser storage is unavailable. */ }
+    const routineOpenKey='small-plan-routine-sections';
+    let routineOpen={};
+    try {
+        const saved=JSON.parse(localStorage.getItem(routineOpenKey)||'{}');
+        if(saved && typeof saved==='object' && !Array.isArray(saved))
+            routineOpen=Object.fromEntries(Object.entries(saved).filter(([,open])=>typeof open==='boolean'));
+    } catch { /* Routine checks remain usable without saved disclosure preferences. */ }
     const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
-    let date = today(), page = 'planner', view = 'week', mobile = 'today', state, notice = '', locked = false, formHandler, proposal, discoveryJob, discovering = false, discoveryMessage = '';
+    let date = today(), page = 'overview', state, notice = '', locked = false, formHandler, discoveryJob, discovering = false, discoveryMessage = '';
     let cacheUnavailable=false;
     let replaying, retryOnTimer = true, trendPeriod = 'week';
-    let routeSequence = 0, scrollTop = 9 * 64, aux = {}, timerQueue = [], lastSync = '', toastTimeout;
+    let routeSequence = 0, aux = {}, timerQueue = [], lastSync = '', toastTimeout;
     const queueKey = 'small-plan-timer-operations-v2';
     try {
         timerQueue = JSON.parse(localStorage.getItem(queueKey) || '[]');
@@ -38,7 +45,7 @@
     const authority=()=>state?.local_authority || (!state ? aux.health?.local_authority : null);
     const readOnly=()=>authority()?.mode==='cloud' && authority()?.read_only===true;
     const cacheNotice='此 Mac 显示只读缓存，请在云端修改计划。';
-    const cacheActions=new Set(['nav','view','mobile','trend','today','day','prev','next','retry','close','tracker-detail',
+    const cacheActions=new Set(['nav','trend','today','day','prev','next','retry','close','tracker-detail',
         'queue','event-detail','session-detail','subscribe','health-import','checkin','open-local-health']);
     function cloudLink() {
         try {
@@ -60,11 +67,12 @@
     const heading = (name, action = '') => '<div class="section-head"><h2>' + name + '</h2>' + action + '</div>';
     const dotLabels = { solid: '全部完成', partial: '部分完成', none: '未完成', na: '无应做记录' };
     function markLabel(mark) {
-        if (!mark.legacy) return dotLabels[mark.status];
+        if (!mark.legacy) return dotLabels[mark.status]+(mark.total?' · '+mark.done+'/'+mark.total+' · '+Math.round(mark.progress*100)+'%':'');
         const legacyLabels={solid:'已打卡',none:'未打卡',na:'无历史记录'};
         return '旧版分类打卡（只读） · '+legacyLabels[mark.status];
     }
-    const dot=(mark,label)=>'<span class="dot '+mark.status+'" role="img"'
+    const progressStyle=mark=>'--progress:'+((mark.progress||0)*100).toFixed(3)+'%';
+    const dot=(mark,label)=>'<span class="dot '+mark.status+'" role="img"'+attr('style',progressStyle(mark))
         + attr('aria-label',label+' · '+markLabel(mark)) + attr('title',label+' · '+markLabel(mark))+'></span>';
 
     function say(text) {
@@ -129,6 +137,7 @@
                 }
                 if (committed) {
                     await reload();
+                    if(page==='overview') await context();
                     return true;
                 }
             }
@@ -142,6 +151,7 @@
             await api('/api/v2/commands', op);
         }
         await reload();
+        if(page==='overview') await context();
         return true;
     }
     function replay() {
@@ -170,6 +180,7 @@
             saveQueue();
         }
         await reload();
+        if(page==='overview') await context();
         notice = '';
         render();
         const stopped = lastStoppedId && by('sessions', lastStoppedId);
@@ -218,15 +229,6 @@
         const secs = Math.max(0, Math.floor(s.segments.reduce((n, x) => n + (x.end ? Date.parse(x.end) : Date.now()) - Date.parse(x.start), 0) / 1000));
         t.textContent = [Math.floor(secs / 3600), Math.floor(secs / 60) % 60, secs % 60].map(n => String(n).padStart(2, '0')).join(':');
     }
-    function taskRow(r, kind) {
-        const id = esc(r.id), done = r.status === 'done', k = kind === 'task' ? 'task' : 'occurrence';
-        return '<article class="task-row"><div class="task-line">' + btn('toggle-' + k, done ? '✓' : '', id, 'check ' + (done ? 'checked' : ''), (done ? '撤销完成 ' : '完成 ') + r.title) + btn('edit-' + k, esc(r.title), id, 'text task-title ' + (done ? 'finished' : '')) + '<button type="button" class="grip" data-grip="' + k + '"' + attr('data-id', r.id) + attr('aria-label', '拖动安排 ' + r.title) + '>⠿</button></div><div class="row-tools">' + (k === 'task' ? '<span>' + esc(r.estimate_minutes || 30) + ' min</span>' : '') + btn('arrange-' + k, '安排', id) + btn('start-' + k, '▷ 计时', id) + (k === 'occurrence' ? btn('skip', r.status === 'skipped' ? '恢复' : '跳过', id) : '') + '</div></article>';
-    }
-    function left() {
-        const n = state.daily_notes.find(x => x.local_date === date), tasks = state.tasks.filter(t => t.local_date === date);
-        const deadlines = state.assessments.filter(a => !['done', 'archived'].includes(a.status)).sort((a, b) => a.due_at.localeCompare(b.due_at)).slice(0, 4);
-        return '<aside class="left rail" data-mobile="today"><section class="focus">' + heading('Focus', btn('note', '✎', '', 'icon', '编辑今日重点与笔记')) + '<p>' + esc(n?.focus || '今天，最想完成什么？') + '</p>' + (n?.note_md ? '<div class="note">' + esc(n.note_md) + '</div>' : '') + '</section><section>' + heading('To-do', btn('edit-task', '＋', '', 'icon', '添加任务')) + '<div class="meta">' + tasks.filter(t => t.status === 'done').length + ' / ' + tasks.length + ' 已完成</div>' + (tasks.map(t => taskRow(t, 'task')).join('') || empty('今天还没有任务。')) + '</section><section>' + heading('Deadlines', btn('nav', '查看', 'study', 'text')) + (deadlines.map(a => btn('assessment', '<small>' + esc(String(a.due_at).slice(0, 10)) + '</small>' + esc(a.title), a.id, 'deadline')).join('') || empty('暂无待办截止日期。')) + '</section></aside>';
-    }
     function groups() {
         const days=D.month(date),first=D.week(days[0])[0],last=D.week(days.at(-1))[6];
         const historicalCategories=new Set((state.category_checks||[]).filter(check=>
@@ -236,68 +238,34 @@
             result.push({ id: null, name: '未分类', color: '#948b7e' });
         return result;
     }
-    function tracker() {
-        const days = D.week(date);
-        const groupsHtml = groups().map(c => {
-            const due = state.occurrences.filter(o => o.local_date === date && (o.category_id || null) === c.id);
-            const weeklyDots = days.map(day => {
-                const status = D.categoryDay(state,day,c.id);
-                const dueForDay=status.status==='partial'?state.occurrences.filter(o=>o.local_date===day && (o.category_id||null)===c.id):[];
-                const count=dueForDay.length ? dueForDay.filter(o=>o.status==='done').length+'/'+dueForDay.length : '';
-                return btn('tracker-detail',dot(status,day)+(count?'<small>'+count+'</small>':''),day+'|'+(c.id||''),'dot-detail',
-                    c.name+' · '+day+' · '+markLabel(status)+(count?' '+count:'')+' · 查看记录');
+    function routineBoard() {
+        const activeGroups=state.categories.filter(c=>!c.archived_at).sort((a,b)=>a.sort_order-b.sort_order);
+        const cards=activeGroups.map(c=>{
+            const due=state.occurrences.filter(o=>o.local_date===date && o.category_id===c.id)
+                .sort((a,b)=>(by('routines',a.routine_id)?.sort_order||0)-(by('routines',b.routine_id)?.sort_order||0));
+            const mark=D.categoryDay(state,date,c.id), percent=Math.round(mark.progress*100);
+            const caption=mark.legacy?markLabel(mark):mark.total?mark.done+'/'+mark.total+' 已完成':'当天无应做项';
+            const templates=state.routines.filter(r=>r.category_id===c.id);
+            const notes=[...new Set(templates.map(r=>r.description_md).filter(Boolean))];
+            const rows=due.map(o=>{
+                const done=o.status==='done';
+                return '<button type="button" class="routine-check'+(done?' finished':'')+'" role="checkbox"'
+                    +attr('aria-checked',String(done))+' data-do="toggle-occurrence"'+attr('data-id',o.id)
+                    +(readOnly()?' disabled':'')+'><span class="routine-checkmark" aria-hidden="true">'+(done?'✓':'')
+                    +'</span><span>'+esc(o.title)+(o.status==='skipped'?'<small>已跳过 · 不计为完成</small>':'')+'</span></button>';
             }).join('');
-            const otherRoutines = state.routines.filter(r => r.active && (r.category_id || null) === c.id && !due.some(o => o.routine_id === r.id));
-            const upcoming = otherRoutines.map(r => btn('edit-routine',
-                esc(r.title) + '<small>周' + r.days_of_week.map(day => weekdays[day]).join('、') + '</small>',
-                r.id, 'deadline')).join('');
-            return '<div class="routine-group" style="--category:' + color(c.color) + '">'
-                + '<div class="group-head"><h3><i></i>' + esc(c.name) + '</h3>'
-                + btn('category-timer','▷ 计时',c.id||'','text','开始'+c.name+'计时')+'</div><div class="dot-row">' + weeklyDots + '</div>'
-                + due.map(o => taskRow(o, 'occurrence')).join('') + upcoming + '</div>';
+            return '<details class="routine-card"'+attr('data-routine-group',c.id)+(routineOpen[c.id]===false?'':' open')
+                +' style="--category:'+color(c.color)+'"><summary><span class="progress-ring '+mark.status+'" role="img"'
+                +attr('style',progressStyle(mark))+attr('aria-label',c.name+' · '+caption+(mark.total?' · '+percent+'%':''))
+                +'><b>'+(mark.total?percent+'%':'–')+'</b></span><span class="routine-card-heading"><strong>'+esc(c.name)
+                +'</strong><small>'+esc(caption)+'</small></span><span class="routine-chevron" aria-hidden="true">▶</span></summary>'
+                +'<div class="routine-card-content">'+(rows||empty(mark.legacy?'历史分类打卡只读。':'这一天没有需要完成的项目。'))
+                +notes.map(note=>'<p class="routine-note">'+esc(note)+'</p>').join('')+'</div></details>';
         }).join('');
-        const labels = days.map(d => '<span>' + short(d, {weekday:'narrow'}) + '</span>').join('');
-        return '<aside class="right rail" data-mobile="routines"><section>'
-            + heading('Weekly tracker', btn('manage','管理','','text')) + '<div class="week-key">' + labels + '</div>'
-            + (groupsHtml || empty('添加分类和习惯，即可开始追踪。')) + btn('edit-routine','＋ 新习惯','','wide')
-            + '</section></aside>';
-    }
-    function segments(date) {
-        return D.actual(state.sessions, date).map(x => ({
-            title: x.session.title || category(x.session.category_id).name, color: category(x.session.category_id).color, start: D.minutes(D.wall(x.start).slice(11)), end: x.end === D.midnight(D.add(date, 1)) ? 1440 : D.minutes(D.wall(x.end).slice(11)), type: 'actual', id: x.session.id
-        }));
-    }
-    function dayBlocks(day) {
-        const result = [];
-        for (const b of state.time_blocks) {
-            const endDate = b.end_date || b.local_date;
-            if (day < b.local_date || day > endDate)
-                continue;
-            const start = day > b.local_date ? 0 : D.minutes(b.start_local), end = day < endDate ? 1440 : D.minutes(b.end_local);
-            if (end <= start)
-                continue;
-            const subject = (b.task_id && by('tasks', b.task_id)) || (b.occurrence_id && by('occurrences', b.occurrence_id)) || {};
-            result.push({
-                start, end, type: 'planned', id: b.id, title: b.title || subject.title || '计划', color: category(b.category_id || subject.category_id).color, time: b.start_local
-            });
-        }
-        for (const e of state.external_events) {
-            if (!e.start_at || !e.end_at)
-                continue;
-            const start = Math.max(Date.parse(e.start_at), D.midnight(day)), end = Math.min(Date.parse(e.end_at), D.midnight(D.add(day, 1)));
-            if (end <= start)
-                continue;
-            result.push({
-                type: 'external', id: e.id, start: D.minutes(D.wall(start).slice(11)), end: end === D.midnight(D.add(day, 1)) ? 1440 : D.minutes(D.wall(end).slice(11)), title: e.title || 'Calendar', color: '#8099a7'
-            });
-        }
-        return D.lanes(result).concat(segments(day));
-    }
-    function grid() {
-        const days = view === 'week' ? D.week(date) : [date];
-        const headers = days.map(d => btn('day', short(d, { weekday: 'short' }) + ' <b>' + Number(d.slice(-2)) + '</b>', d, d === date ? 'selected' : '')).join('');
-        const columns = days.map(day => '<div class="day-column" data-day="' + day + '">' + dayBlocks(day).map(b => '<button type="button" class="event ' + b.type + '"' + attr('data-do', b.type === 'planned' ? 'block' : b.type === 'actual' ? 'session-detail' : 'event-detail') + attr('data-id', b.id) + attr('aria-label', b.title + ' ' + D.clock(b.start)) + ' style="--category:' + color(b.color) + (b.type === 'actual' ? '' : ';left:' + (2 + 74 * b.lane / b.count) + '%;width:' + (74 / b.count - 1) + '%') + ';top:' + b.start / 14.4 + '%;height:' + Math.max(0.5, (b.end - b.start) / 14.4) + '%">' + (b.type === 'planned' ? '<span class="block-grip" data-grip="block"' + attr('data-id', b.id) + '>⠿</span>' : '') + '<b>' + esc(b.title) + '</b><small>' + D.clock(b.start) + '</small>' + (b.type === 'planned' ? '<span class="resize" data-grip="resize"' + attr('data-id', b.id) + '></span>' : '') + '</button>').join('') + '</div>').join('');
-        return '<div class="day-head" style="--days:' + days.length + '"><span></span>' + headers + '</div><div class="grid-scroll"><div class="time-grid" style="--days:' + days.length + '"><div class="hours">' + Array.from({ length: 24 }, (_, i) => '<time>' + String(i).padStart(2, '0') + ':00</time>').join('') + '</div>' + columns + '</div></div><div class="legend"><span>▧ 计划</span><span>▮ 实际</span><span>▱ 外部日历</span></div>';
+        return '<section class="routine-overview" aria-label="每日惯例进度">'+heading('Daily routines',
+            '<span class="meta">'+esc(short(date,{weekday:'short',month:'short',day:'numeric'}))+'</span>')
+            +'<p class="overview-intro">展开类别，逐项勾选。圆环按已完成项数填充；这些打卡独立保存在 Small Plan。</p>'
+            +'<div class="routine-cards">'+(cards||empty('尚未添加日常惯例。'))+'</div></section>';
     }
     function month() {
         const days = D.month(date), start = D.week(days[0])[0], end = D.week(days.at(-1))[6], cells = [];
@@ -305,9 +273,6 @@
             cells.push(btn('day', Number(d.slice(-2)) + '<span class="month-dots">' + groups().map(c => '<i style="--category:' + color(c.color) + '">' + dot(D.categoryDay(state,d,c.id), c.name) + '</i>').join('') + '</span>', d, (d === date ? 'selected ' : '') + (d.slice(0, 7) !== date.slice(0, 7) ? 'outside' : '')));
         }
         return '<div class="month-grid">' + weekdays.map(w => '<b>' + w + '</b>').join('') + cells.join('') + '</div>';
-    }
-    function planner() {
-        return '<div class="dashboard" data-tab="' + mobile + '">' + left() + '<section class="calendar card" data-mobile="calendar">' + heading('Calendar', '<div class="segments">' + ['day', 'week', 'month'].map(v => btn('view', ({ day: '日', week: '周', month: '月' })[v], v, view === v ? 'selected' : '')).join('') + '</div>') + (view === 'month' ? month() : grid()) + '</section>' + tracker() + '</div>';
     }
     function actualTrends(stats,days) {
         if (!stats?.by_day) return '';
@@ -346,7 +311,7 @@
             const start = dayStart + i * 600000, s = actual.find(a => a.start < start + 600000 && a.end > start);
             return '<i style="--pixel:' + color(s ? category(s.session.category_id).color : '#eeeee8') + '"' + attr('title', D.wall(start).slice(11) + ' · ' + (s ? s.session.title : '未记录')) + '></i>';
         }).join('');
-        return '<div class="secondary"><section class="card">' + heading('Month at a glance') + month() + '</section><section class="card">' + heading('Recorded time') + '<p>' + esc(date) + ' · 每格 10 分钟</p><div class="pixels">' + pixels + '</div><p>' + recordedLabel + ' 分钟已记录 · ' + Math.max(0, Math.round(available - recorded)) + ' 分钟未记录</p></section><section class="card span">' + heading('Routine matrix') + '<p class="meta">● 全部完成　◐ 部分完成　○ 未完成　– 无应做记录</p><div class="table-scroll"><table><thead><tr><th>分类</th>' + days.map(d => '<th>' + Number(d.slice(-2)) + '</th>').join('') + '</tr></thead><tbody>' + groups().map(c => '<tr style="--category:' + color(c.color) + '"><th>' + esc(c.name) + '</th>' + days.map(d => '<td>' + dot(D.categoryDay(state,d,c.id), d) + '</td>').join('') + '</tr>').join('') + '</tbody></table></div></section><section class="card span">' + heading('Category hours') + (stats?.by_category ? '<table><tr><th>分类</th><th>计划小时</th><th>实际小时</th></tr>' + Object.entries(stats.by_category).map(([id, s]) => '<tr><td>' + esc(category(id).name) + '</td><td>' + (s.planned_minutes / 60).toFixed(1) + '</td><td>' + (s.actual_minutes / 60).toFixed(1) + '</td></tr>').join('') + '</table>' : empty(aux.loading ? '正在读取统计…' : '暂无分类统计。')) + '</section>' + actualTrends(stats,days) + '</div>';
+        return routineBoard()+'<div class="secondary"><section class="card">' + heading('Month at a glance') + month() + '</section><section class="card">' + heading('Recorded time') + '<p>' + esc(date) + ' · 每格 10 分钟</p><p class="meta">来自 Small Plan 计时记录；Apple Calendar 中的安排不自动计为实际活动。</p><div class="pixels">' + pixels + '</div><p>' + recordedLabel + ' 分钟已记录 · ' + Math.max(0, Math.round(available - recorded)) + ' 分钟未记录</p></section><section class="card span">' + heading('Routine matrix') + '<p class="meta">● 全部完成　◐ 部分完成　○ 未完成　– 无应做记录</p><div class="table-scroll"><table><thead><tr><th>分类</th>' + days.map(d => '<th>' + Number(d.slice(-2)) + '</th>').join('') + '</tr></thead><tbody>' + groups().map(c => '<tr style="--category:' + color(c.color) + '"><th>' + esc(c.name) + '</th>' + days.map(d => '<td>' + btn('tracker-detail',dot(D.categoryDay(state,d,c.id),d),d+'|'+(c.id||''),'dot-detail',c.name+' · '+d+' · 查看记录') + '</td>').join('') + '</tr>').join('') + '</tbody></table></div></section><section class="card span">' + heading('Category hours') + (stats?.by_category ? '<table><tr><th>分类</th><th>历史计划小时</th><th>实际小时</th></tr>' + Object.entries(stats.by_category).map(([id, s]) => '<tr><td>' + esc(category(id).name) + '</td><td>' + (s.planned_minutes / 60).toFixed(1) + '</td><td>' + (s.actual_minutes / 60).toFixed(1) + '</td></tr>').join('') + '</table>' : empty(aux.loading ? '正在读取统计…' : '暂无分类统计。')) + '</section>' + actualTrends(stats,days) + '</div>';
     }
     function study() {
         const courses = state.courses.map(c => btn('course', esc(c.name), c.id, 'list-item')).join('');
@@ -363,8 +328,8 @@
         }).join('');
         return '<div class="secondary"><section class="card">' + heading('Courses',btn('course','＋ 课程'))
             + (courses || empty('尚未添加课程。')) + '</section><section class="card">' + heading('Assessments',btn('assessment','＋ 截止事项'))
-            + (assessments || empty('暂无课程截止事项。')) + '</section><section class="card">' + heading('Study planning')
-            + '<div class="actions">' + btn('study-import','导入 CSV / ICS') + btn('suggest','预览排程建议','','primary')
+            + (assessments || empty('暂无课程截止事项。')) + '</section><section class="card">' + heading('Import coursework')
+            + '<div class="actions">' + btn('study-import','导入 CSV / ICS')
             + '</div></section><section class="card">' + heading('ICS subscriptions',subscriptionAction) + (remote ? empty('私有订阅链接请在 Mac 的 Small Plan 中配置。') : '')
             + (subscriptions || empty(aux.study?.message || (aux.loading ? '正在读取订阅…' : '暂无课程日历订阅。'))) + '</section></div>';
     }
@@ -391,7 +356,7 @@
             +(explanation && explanation!==summary?'<p>'+esc(explanation)+'</p>':'')
             +(status||item.deadline?'<p>'+esc([status,item.deadline && (career ? (item.kind==='followup'?'跟进日期 ':'截止日期 ') : '')+item.deadline].filter(Boolean).join(' · '))+'</p>':'')
             +'<div class="actions">'+(/^https?:\/\//i.test(item.url)?'<a target="_blank" rel="noopener noreferrer"'+attr('href',item.url)+'>查看来源 ↗</a>':'')
-            +btn('external-task','加入当日任务',item.id)+'</div></article>';
+            +'</div></article>';
     }
     function careerFeed(rows) {
         const groups = Object.fromEntries(careerGroups.map(group=>[group.id,[]]));
@@ -492,24 +457,21 @@
             app.innerHTML='<main id="main">'+cacheBanner()+'<h1>本机健康记录</h1>'+insights()+btn('retry','重新读取计划缓存')+'</main>';return;
         }
         if (!state) {
-            app.innerHTML = '<main class="loading"><h1>small<span>.</span>plan</h1><p>' + esc(notice || '正在打开你的计划…') + '</p>' + btn('retry', '重新连接') + (cacheUnavailable?btn('open-local-health','打开本机健康记录'):'') + '</main>';
+            app.innerHTML = '<main class="loading"><h1>small<span>.</span>plan</h1><p>' + esc(notice || '正在打开生活总览…') + '</p>' + btn('retry', '重新连接') + (cacheUnavailable?btn('open-local-health','打开本机健康记录'):'') + '</main>';
             return;
         }
         const focused = document.activeElement?.closest('[data-do]'), focusKey = focused && app.contains(focused) ? [focused.dataset.do, focused.dataset.id] : null;
 
-        const plannerPage = page === 'planner', dateLabel = view === 'month' && plannerPage ? short(date, { month:'long',year:'numeric' }) : view === 'week' && plannerPage ? short(D.week(date)[0]) + ' – ' + short(D.week(date)[6]) : short(date, { weekday: 'long', month: 'long', day: 'numeric' });
-        app.innerHTML = '<header class="appbar"><a class="wordmark" href="#" data-do="nav" data-id="planner">small<span>.</span>plan</a><nav aria-label="主导航">' + Object.entries(pages).map(([key, label]) => btn('nav', label, key, page === key ? 'current' : '')).join('') + '</nav><div class="timer">' + timer() + '</div></header><main id="main">' + cacheBanner() + '<div class="pagehead"><div><p class="kicker">' + (plannerPage ? 'MELBOURNE · ' + date.slice(0, 4) : short(date, {month:'long', year:'numeric'})) + '</p><h1>' + (plannerPage ? dateLabel : pages[page]) + '<em>.</em></h1></div><div class="heading-controls"><button type="button" class="sync-label" data-do="nav" data-id="settings"><i></i>' + esc(timerQueue.length ? (readOnly() ? '本机队列已保留' : '计时待同步') : lastSync || '本地计划') + '</button><div class="date-nav">' + btn('prev', '‹', '', 'icon', '上一个时段') + btn('today', '今天') + btn('next', '›', '', 'icon', '下一个时段') + '<input aria-label="选择日期" type="date" value="' + date + '" id="date-picker"></div></div></div>' + (notice ? '<div class="banner" role="alert">' + esc(notice) + ' ' + btn('retry', '刷新') + (timerQueue.length ? btn('queue', '检查计时队列') : '') + '</div>' : '') + (plannerPage ? '<div class="mobile-tabs">' + [['today', '今天'], ['calendar', '日历'], ['routines', '习惯']].map(([k, t]) => btn('mobile', t, k, mobile === k ? 'selected' : '')).join('') + '</div>' + planner() : page === 'overview' ? overview() : page === 'study' ? study() : page === 'insights' ? insights() : page === 'settings' ? settings() : feed()) + '</main>';
-        const next = app.querySelector('.grid-scroll');
-        if (next) {
-            const restoreScroll = () => {
-                if (next.isConnected && next.clientHeight > 0) next.scrollTop = scrollTop;
-            };
-            restoreScroll();
-            window.requestAnimationFrame?.(restoreScroll);
-            next.addEventListener('scroll', () => {
-                if (next.isConnected && next.clientHeight > 0) scrollTop = next.scrollTop;
-            }, {passive:true});
-        }
+        app.innerHTML = '<header class="appbar"><a class="wordmark" href="#" data-do="nav" data-id="overview">small<span>.</span>plan</a><nav aria-label="主导航">'
+            +Object.entries(pages).map(([key,label])=>btn('nav',label,key,page===key?'current':'')).join('')
+            +'</nav><div class="timer">'+timer()+'</div></header><main id="main">'+cacheBanner()
+            +'<div class="pagehead"><div><p class="kicker">'+short(date,{month:'long',year:'numeric'})+'</p><h1>'+pages[page]+'<em>.</em></h1></div>'
+            +'<div class="heading-controls"><button type="button" class="sync-label" data-do="nav" data-id="settings"><i></i>'
+            +esc(timerQueue.length?(readOnly()?'本机队列已保留':'计时待同步'):lastSync||'本地记录')+'</button><div class="date-nav">'
+            +btn('prev','‹','','icon',page==='overview'?'上个月':'前一天')+btn('today','今天')+btn('next','›','','icon',page==='overview'?'下个月':'后一天')
+            +'<input aria-label="选择日期" type="date" value="'+date+'" id="date-picker"></div></div></div>'
+            +(notice?'<div class="banner" role="alert">'+esc(notice)+' '+btn('retry','刷新')+(timerQueue.length?btn('queue','检查计时队列'):'')+'</div>':'')
+            +(page==='overview'?overview():page==='study'?study():page==='insights'?insights():page==='settings'?settings():feed())+'</main>';
         if (focusKey) {
             const match = Array.from(app.querySelectorAll('[data-do]')).find(e => e.dataset.do === focusKey[0] && e.dataset.id === focusKey[1]);
             match?.focus({ preventScroll: true });
@@ -558,6 +520,7 @@
         }
     }
     async function navigate(day = date, target = page) {
+        target=Object.hasOwn(pages,target)?target:'overview';
         const changedPage=target!==page;
         date = day;
         page = target;
@@ -750,29 +713,19 @@
             await navigate(date, id);
             return;
         }
-        if (name === 'view') {
-            view = id;
-            render();
-            return;
-        }
-        if (name === 'mobile') {
-            mobile = id;
-            render();
-            return;
-        }
         if (name === 'today' || name === 'day') {
             await navigate(name === 'today' ? today() : id);
             return;
         }
         if (name === 'prev' || name === 'next') {
             const direction = name === 'next' ? 1 : -1;
-            if ((view === 'month' && page === 'planner') || page === 'overview') {
+            if (page === 'overview') {
                 const d = new Date(date.slice(0, 7) + '-01T12:00Z');
                 d.setUTCMonth(d.getUTCMonth() + direction);
                 await navigate(d.toISOString().slice(0, 10));
             }
             else
-                await navigate(D.add(date, direction * (view === 'week' && page === 'planner' ? 7 : 1)));
+                await navigate(D.add(date, direction));
             return;
         }
         if (name === 'edit-task') {
@@ -906,11 +859,6 @@
             dialog('导入课程截止事项', select('format', '文件格式', [['csv', 'CSV'], ['ics', 'ICS']], 'csv') + select('course_id', '课程', [['', '无课程'], ...state.courses.map(c => [c.id, c.name])], '') + '<label>文件<input type="file" name="file" accept=".csv,.ics" required></label>', async (f, fd) => auxPost('/api/study/import', { format: f.format, course_id: f.course_id || null, content: await fd.get('file').text() }), '导入');
             return;
         }
-        if (name === 'suggest') {
-            proposal = await api('/api/plan/suggest?date=' + date);
-            dialog('排程建议 · ' + date, '<p>可用容量 ' + Number(proposal.capacity_minutes || 0) + ' 分钟</p>' + (proposal.items || []).map(i => '<p>' + esc(i.start_local) + ' – ' + esc(i.end_local) + ' · ' + esc(i.title || by('tasks', i.task_id)?.title || by('assessments', i.assessment_id)?.title || '计划') + '</p>').join('') + (proposal.reasons || []).map(s => '<p>' + esc(s) + '</p>').join('') + (!proposal.items?.length ? empty('当前没有可安排的事项。') : ''), proposal.items?.length ? () => command('plan.accept', { date: proposal.date, items: proposal.items }) : null, '确认加入计划');
-            return;
-        }
         if (name === 'refresh-feed') {
             const r = await auxPost('/api/integrations/' + page + '/refresh', {});
             if (r.errors?.length)
@@ -962,114 +910,22 @@
             }, '查看备份');
         }
     }
-    let drag, suppressClickUntil = 0;
-    function placement(e) {
-        const c = document.elementFromPoint(e.clientX, e.clientY)?.closest('.day-column');
-        if (!c)
-            return null;
-        const box = c.getBoundingClientRect(), position = (e.clientY - box.top) / box.height * 1440;
-        return { column: c, day: c.dataset.day, position };
-    }
-    function clearDrag() {
-        document.querySelector('.drop-marker')?.remove();
-        document.body.classList.remove('dragging');
-        drag = null;
-    }
-    document.addEventListener('pointerdown', e => {
-        const grip = e.target.closest('[data-grip]');
-        if (readOnly() || !grip || e.button !== 0 || e.isPrimary === false || drag || locked)
-            return;
-        const event = grip.closest('.event'), offset = grip.dataset.grip === 'block' && event ? (e.clientY - event.getBoundingClientRect().top) / event.closest('.day-column').getBoundingClientRect().height * 1440 : 0;
-        drag = { kind: grip.dataset.grip, id: grip.dataset.id, pointer: e.pointerId, x: e.clientX, y: e.clientY, offset, started: false };
-        grip.setPointerCapture(e.pointerId);
-    });
-    document.addEventListener('pointermove', e => {
-        if (!drag || drag.pointer !== e.pointerId)
-            return;
-        if (!drag.started && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5)
-            return;
-        drag.started = true;
-        document.body.classList.add('dragging');
-        document.querySelector('.drop-marker')?.remove();
-        const p = placement(e);
-        if (!p)
-            return;
-        const marker = document.createElement('span');
-        marker.className = 'drop-marker';
-        const snapped = drag.kind === 'resize' ? Math.min(1440,Math.max(0,Math.round(p.position/15)*15))
-            : D.minutes(D.slot(p.day,p.position-drag.offset,15).start_local);
-        marker.style.top = Math.min(99,snapped/14.4) + '%';
-        marker.textContent = snapped === 1440 ? '24:00' : D.clock(snapped);
-        p.column.append(marker);
-        const scroll = p.column.closest('.grid-scroll'), rect = scroll.getBoundingClientRect();
-        if (e.clientY < rect.top + 28)
-            scroll.scrollTop -= 16;
-        else if (e.clientY > rect.bottom - 28)
-            scroll.scrollTop += 16;
-    });
-    const cancelPointer = e => { if (drag?.pointer === e.pointerId) clearDrag(); };
-    document.addEventListener('pointercancel', cancelPointer);
-    document.addEventListener('lostpointercapture', cancelPointer);
-    window.addEventListener('blur', clearDrag);
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape')
-            clearDrag();
-    });
-    document.addEventListener('pointerup', async (e) => {
-        if (!drag || drag.pointer !== e.pointerId)
-            return;
-        const d = drag, p = placement(e);
-        clearDrag();
-        if (!d.started)
-            return;
-        suppressClickUntil = Date.now() + 350;
-        if (!p || locked)
-            return;
-        const block = ['block', 'resize'].includes(d.kind) ? by('time_blocks', d.id) : null;
-        let duration = block ? (Date.parse((block.end_date || block.local_date) + 'T' + block.end_local + 'Z') - Date.parse(block.local_date + 'T' + block.start_local + 'Z')) / 60000 : by('tasks', d.id)?.estimate_minutes || 30;
-        let fields = D.slot(p.day, p.position - d.offset, duration);
-        if (d.kind === 'resize') {
-            const snap = Math.max(0, Math.min(1440, Math.round(p.position / 15) * 15));
-            fields = {
-                local_date: block.local_date, start_local: block.start_local, end_date: snap === 1440 ? D.add(p.day, 1) : p.day, end_local: D.clock(snap)
-            };
-        }
-        const payload = {
-            ...fields, id: block?.id, task_id: block?.task_id || (d.kind === 'task' ? d.id : undefined), occurrence_id: block?.occurrence_id || (d.kind === 'occurrence' ? d.id : undefined)
-        };
-        locked = true;
-        try {
-            await command('block.upsert', payload);
-        }
-        catch (e) {
-            fail(e);
-        }
-        finally {
-            locked = false;
-        }
-    });
     document.addEventListener('toggle', e => {
         const target=e.target, id=target?.dataset?.careerGroup;
-        if (!careerGroups.some(group=>group.id===id) || !app.contains(target)) return;
+        if (!app.contains(target)) return;
+        const routineId=target?.dataset?.routineGroup;
+        if(routineId && state.categories.some(c=>c.id===routineId)) {
+            routineOpen[routineId]=target.open;
+            try { localStorage.setItem(routineOpenKey,JSON.stringify(routineOpen)); } catch { /* Keep in-memory state. */ }
+            return;
+        }
+        if (!careerGroups.some(group=>group.id===id)) return;
         careerOpen[id]=target.open;
         try { localStorage.setItem(careerOpenKey,JSON.stringify(careerOpen)); } catch { /* Keep the current page usable. */ }
     }, true);
     document.addEventListener('click', async (e) => {
-        if (Date.now() < suppressClickUntil)
-            return;
-        const keyboardGrip = e.detail === 0 && e.target.closest('[data-grip]');
-        if (keyboardGrip && !readOnly()) {
-            const k = keyboardGrip.dataset.grip;
-            blockForm(k === 'resize' ? 'block' : k, keyboardGrip.dataset.id);
-            return;
-        }
         const el = e.target.closest('[data-do]');
-        if (!el) {
-            const p = e.target.closest('.day-column') && placement(e);
-            if (p && !readOnly())
-                blockForm('new', '', D.slot(p.day, p.position, 30));
-            return;
-        }
+        if (!el) return;
         e.preventDefault();
         if (el.dataset.do==='discover' && !locked && !readOnly()) {
             try { await discoverCalendars(); } catch(error) { fail(error); }
@@ -1132,8 +988,10 @@
         await reload();
         if (timerQueue.length && !readOnly())
             await replay();
-        const c = await api('/api/calendar/status');
-        lastSync = calendarLabel(c);
-        render();
+        try {
+            const c = await api('/api/calendar/status');
+            lastSync = calendarLabel(c);
+        } catch(error) { notice=error.message; }
+        await context();
     })().catch(fail);
 })();

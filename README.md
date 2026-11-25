@@ -1,12 +1,12 @@
 # Small Plan
 
-**A calendar-centered personal life dashboard · 以日历为中心的个人生活面板**
+**A personal life overview · 个人生活总览**
 
 [English guide](#english-guide) · [中文说明](#中文说明)
 
 ## English guide
 
-Small Plan brings tasks, routines, coursework, time tracking and reflection into one calendar-centered dashboard. Career reuses an existing career-ops workspace, while health data stays on the Mac. Defaults are single-user mode, a Monday-start week and the `Australia/Melbourne` time zone.
+Small Plan opens on Overview: daily routine progress, recorded time, coursework and reflection. Daily scheduling stays in Reminders and Apple Calendar; the Planner interface is retired. Career reuses an existing career-ops workspace, while health data stays on the Mac. Defaults are single-user mode, a Monday-start week and the `Australia/Melbourne` time zone.
 
 ### Quick start
 
@@ -22,19 +22,20 @@ Open **[Small Plan locally](http://127.0.0.1:8765/)**. On macOS, you can also do
 
 | Page | What it does |
 | --- | --- |
-| Planner | Focus, Todo and deadlines on the left; a 24-hour day/week/month calendar in the center; grouped routines and the Weekly Tracker on the right |
-| Overview | Monthly category-dot matrix, 10-minute activity cells, category shares, daily/weekly trends and previous-month comparison; planned time stays separate |
-| Study | Courses, assessments, effort estimates, CSV/ICS imports, private subscriptions and scheduling suggestions that require confirmation |
-| Career | Collapsible groups for opportunities, follow-ups and application progress, with counts and remembered open/closed state; turn a source item into a daily task |
+| Overview | Home page with collapsible routine groups, individual checkboxes and proportional progress rings; monthly dots, 10-minute activity cells, category shares and trends; historical planned totals stay separate |
+| Study | Courses, assessments, effort estimates, CSV/ICS imports and private subscriptions |
+| Career | Collapsible groups for opportunities, follow-ups and application progress, with counts, original source links and remembered open/closed state |
 | Radar | Rule-ranked RSS/GitHub picks with original links, publication/collection times and an archive |
 | Insights | Local Apple Health imports, daily energy/stress check-ins, data coverage and exploratory associations |
 | Settings | Apple Calendar, pending sync, timer history, backup/restore, exports and AI status |
 
-**Scheduling:** drag the always-visible `⠿` handle onto the calendar, or click **Arrange** to enter the date and times. Dragging snaps to 15 minutes; forms accept exact minutes, all 24 hours and intervals crossing midnight. Move a block to reschedule it or resize its bottom edge. A Todo can have several planned blocks. Scheduling the same dated routine again updates its existing block.
+**Daily workflow:** manage tasks and scheduling in Reminders / Apple Calendar. Overview contains local routine checkboxes, not a second Todo list or a calendar editor. Career and Radar keep original source links without creating hidden local tasks. Existing tasks, plans and historical records remain in backups.
 
-**Routine dots:** check off each routine separately. A category becomes solid only when every routine due that day is complete. Partial completion shows progress, skipped items remain incomplete, and a day with no due items shows a dash. Click a category dot for details. Ordinary Todos do not change this completion rate. Pre-migration manual dots remain as read-only history. Category and recurrence edits affect newly generated occurrences; existing current-day and historical snapshots retain their original requirements.
+**Routine dots:** check off each routine separately. A category becomes solid only when every routine due that day is complete. Partial completion shows the exact completed share (for example, 1/3 = 33%, 2/3 = 67%); skipped items remain incomplete, and a day with no due items shows a dash. Click a category dot for details. Ordinary Todos do not change this completion rate. Pre-migration manual dots remain as read-only history. Category and recurrence edits affect newly generated occurrences; existing current-day and historical snapshots retain their original requirements.
 
-**Timers:** start from a task, routine or category. Pause, resume or stop from the top bar. Only one activity can be active at a time. Stopping saves actual intervals first, then asks separately whether the task is complete. Refreshing restores the timer, paused time is excluded, and continuous records longer than six hours require review before entering statistics or Calendar sync. Actual duration keeps second-level precision. “Unrecorded” means only that no activity was recorded.
+**Completion source:** Overview checkboxes are stored independently in Small Plan; they do not sync completion status with Apple Reminders. Actual-time charts use Small Plan timer sessions, not automatically inferred completion or duration from external calendar plans. Dated routine occurrences can represent a finite study sequence without repeating after its final date.
+
+**Timers:** optionally start a named activity from the top bar and choose its category. Pause, resume or stop from the top bar. Only one activity can be active at a time. Stopping saves actual intervals; routine completion is checked separately in Overview. Refreshing restores the timer, paused time is excluded, and continuous records longer than six hours require review before entering statistics or Calendar sync. Actual duration keeps second-level precision. “Unrecorded” means only that no activity was recorded.
 
 **Offline behavior:** an already-open page retains timer operations with their timestamps and operation IDs, then replays them on reconnection and surfaces conflicts. A stopped local server cannot serve a newly opened page. Full multi-device offline editing is not supported. Keep browser storage intact while timer operations are pending.
 
@@ -52,9 +53,9 @@ The local service checks sync work every minute while online. The native helper 
 
 ICS export and `/calendar.ics` remain available but are separate from native EventKit writes. Avoid subscribing to the same plans through ICS while native sync is enabled.
 
-### Data sources and scheduling
+### Data sources
 
-**Career** reads an existing career-ops workspace's `data/applications.md`, structured daily digest and follow-up files. It does not create another application-status system, change the original website or send email. Continue updating statuses in career-ops; adding a task never marks a job Applied. The current default source directory is `~/Library/Mobile Documents/com~apple~CloudDocs/career 2026/career-ops` in `integrations.py`. Adapt that path to your own workspace; the repository contains no career records.
+**Career** reads an existing career-ops workspace's `data/applications.md`, structured daily digest and follow-up files. It does not create another application-status system, change the original website or send email. Continue updating statuses in career-ops; viewing a recommendation never marks a job Applied. The current default source directory is `~/Library/Mobile Documents/com~apple~CloudDocs/career 2026/career-ops` in `integrations.py`. Adapt that path to your own workspace; the repository contains no career records.
 
 **Radar** fetches public RSS/Atom feeds and GitHub repositories daily. Defaults include the Hugging Face blog and relevant data-science repositories. Date and keyword rules select at most five featured items, including at most two repositories. Remaining items stay in the archive, and source failures preserve previous results. No AI is required.
 
@@ -67,7 +68,7 @@ Assignment 1,2026-12-03T17:00:00+11:00,180,course-a-assignment-1
 
 `estimate_minutes` and `source_id` are optional. ICS supports VEVENT, dated VTODO, UTC, IANA time zones and cancellations. Recurrence rules are rejected explicitly; supply an expanded deadline list. Each import is limited to 500 items and 2 MB. Private subscription URLs remain on the Mac and are excluded from ordinary backups and cloud sync. Daily refreshes flag changed deadlines without moving confirmed plans.
 
-**Scheduling suggestions** use at most 70% of free time in the default 09:00–18:00 working window, ordered by deadline, priority and estimated effort. Existing plans and imported appointments are protected. Nothing is written until you accept a suggestion, and conflicts are checked again at acceptance.
+The legacy scheduling API and calendar export remain for data compatibility; the current interface does not offer scheduling suggestions or drag-to-plan controls.
 
 ### Local health and planning insights
 
@@ -134,7 +135,7 @@ A public GitHub repository shares the source; it does not host the running dashb
 
 ## 中文说明
 
-以日历为中心的个人生活面板。任务、课程、惯例、计时与复盘在同一个界面；Career 复用已有 career-ops；健康数据只在本机处理。默认单用户、周一开始、Australia/Melbourne 时区。
+以 Overview 为首页的个人生活总览。日常排程在 Reminders 和 Apple Calendar 中管理，Planner 界面已移除；面板保留惯例进度、时间统计、课程与复盘；Career 复用已有 career-ops；健康数据只在本机处理。默认单用户、周一开始、Australia/Melbourne 时区。
 
 ### 打开
 
@@ -152,19 +153,20 @@ python3 server.py --open
 
 | 页面 | 功能 |
 | --- | --- |
-| Planner | 左边 Focus／Todo／截止日期，中间日周月日历，右边分组 routines 和 Weekly Tracker |
-| Overview | 月度圆点矩阵、实际活动的 10 分钟色块、分类占比与日／周趋势、上月对比；计划时间单列 |
-| Study | 课程、作业、预计工作量、CSV／ICS 导入、私有订阅与确认式排程 |
-| Career | 待考虑岗位、待跟进、投递进度三个可折叠分组，显示数量并记住展开状态；从来源创建当日任务 |
+| Overview | 默认首页：可折叠的惯例分组、逐项勾选与按比例填充的圆环；月度圆点矩阵、10 分钟色块、分类占比和趋势；历史计划时长单列 |
+| Study | 课程、作业、预计工作量、CSV／ICS 导入和私有订阅 |
+| Career | 待考虑岗位、待跟进、投递进度三个可折叠分组，显示数量、原始来源并记住展开状态 |
 | Radar | RSS／GitHub 规则精选、原始链接、发布／采集时间与资料列表 |
 | Insights | 本机 Apple Health 导入、每日精力／压力自评、覆盖率与探索性关联 |
 | Settings | Apple Calendar、待同步队列、计时历史、备份恢复、导出与 AI 状态 |
 
-**安排任务／routine**：拖住每行持续显示的 `⠿` 到日历，或点「安排」填写日期和起止时间。拖动按 15 分钟吸附，表单支持精确分钟、全天 24 小时与跨午夜。拖时间块可改期，底边可调整时长。Todo 可有多个时间块；同一天的 routine 重复安排会更新已有块。
+**日常流程**：任务和日历排程在 Reminders／Apple Calendar 管理。Overview 保留惯例打卡，不再显示 Todo 和日历编辑器；Career／Radar 保留来源链接，不再生成隐藏的本地任务。已有任务、计划及历史记录仍保留在备份中。
 
-**圆点**：每项 routine 单独勾选。类别圆点只计算当天应做的 routines，全部完成才填实，部分完成显示进度；跳过不算完成，没有应做项显示短横。点击类别圆点展开明细。普通 Todo 不改变这个完成率。迁移前保留旧版手动圆点，历史只读。分类／重复规则修改影响之后生成的实例，已生成的当天和过去记录保留快照。
+**圆点**：每项 routine 单独勾选。类别圆点只计算当天应做的 routines，全部完成才填实，部分完成按真实比例填充（1/3 为 33%，2/3 为 67%）；跳过不算完成，没有应做项显示短横。点击类别圆点展开明细。普通 Todo 不改变这个完成率。迁移前保留旧版手动圆点，历史只读。分类／重复规则修改影响之后生成的实例，已生成的当天和过去记录保留快照。
 
-**计时**：任务、routine 和类别旁均可开始；顶栏暂停／继续／结束。同一时间只允许一个活动。结束先保存实际时段，再单独询问是否完成任务。刷新可恢复，暂停不计时；超过 6 小时的异常长记录要先校对才计入统计和同步。实际时长保留到秒。「未记录」只代表没有实际记录。
+**完成状态来源**：Overview 内的勾选独立保存在 Small Plan，目前不与 Apple Reminders 的完成状态同步。实际时长图表来自 Small Plan 计时，不把外部日历中的计划自动算作已完成或实际投入。有限日期的学习序列使用独立的每日记录，到期后不再重复。
+
+**计时**：可从顶栏为活动命名、选择分类并开始；顶栏暂停／继续／结束。同一时间只允许一个活动。结束保存实际时段，惯例完成状态在 Overview 单独勾选。刷新可恢复，暂停不计时；超过 6 小时的异常长记录要先校对才计入统计和同步。实际时长保留到秒。「未记录」只代表没有实际记录。
 
 **断网**：已打开页面的计时操作保留时间戳和操作 ID，重连逐条同步并显示冲突。服务停止时不能重新打开网页；本版不承诺完整多设备离线编辑。不要清除待同步计时所在的浏览器存储。
 
@@ -184,7 +186,7 @@ ICS 导出和 `/calendar.ics` 仍可使用，但不是 EventKit 的 iCloud 写�
 
 ### 数据来源
 
-Career 只读现有 career-ops 的 `data/applications.md`、每日结构化摘要及跟进文件；不另建投递状态、不更改原网站、不发送邮件。服务在线时检测文件变化。请继续在原 career-ops 网站维护状态；加入当日任务不会标记 Applied。
+Career 只读现有 career-ops 的 `data/applications.md`、每日结构化摘要及跟进文件；不另建投递状态、不更改原网站、不发送邮件。服务在线时检测文件变化。请继续在原 career-ops 网站维护状态；查看推荐不会标记 Applied。
 
 默认来源为 `integrations.py` 中的 `~/Library/Mobile Documents/com~apple~CloudDocs/career 2026/career-ops`；在其他电脑使用时请改成自己的目录。仓库不包含求职记录。
 
@@ -199,7 +201,7 @@ Assignment 1,2026-12-03T17:00:00+11:00,180,course-a-assignment-1
 
 `estimate_minutes` 和 `source_id` 可省略。ICS 支持 VEVENT／带日期 VTODO、UTC、IANA 时区、取消记录；重复规则会明确拒绝，请提供展开后的截止清单。每次最多 500 项、2 MB。私有订阅链接只留在 Mac，不进入普通备份或云端。订阅每日检查，截止日期改变会提示，已有安排不移动。
 
-排程建议默认使用 09:00–18:00 空闲时段的最多 70%，根据截止日期、优先级与预计工作量排序，避开已有安排和外部约会。只在接受后写入，并再次检查冲突。
+旧排程接口和日历导出保留用于数据兼容；当前界面不再提供排程建议或拖拽安排。
 
 ### 本机健康分析
 

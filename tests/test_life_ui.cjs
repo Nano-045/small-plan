@@ -81,19 +81,53 @@ function dashboardHarness(routes = {}, statuses = {}, initialStorage = {}) {
     }
     return { saved, elements, requests, context, listeners, errors, click, flags, storage, online:()=>listeners['window:online'](), settle: () => new Promise(r => setImmediate(r)) };
 }
-test('every page renders real empty states and all mobile tabs are reachable', async () => {
+test('Overview opens with loaded statistics and keeps removed planning routes out of navigation', async () => {
     const h = dashboardHarness();
     await h.settle();
-    assert.match(h.elements['#app'].innerHTML, /Practice/);
-    for (const page of ['overview', 'study', 'career', 'radar', 'insights', 'settings', 'planner']) {
+    assert.match(h.elements['#app'].innerHTML, /<h1>Overview/);
+    assert.ok(h.requests.some(r => r.path.startsWith('/api/v2/overview?')));
+    assert.doesNotMatch(h.elements['#app'].innerHTML, /Practice|data-id="planner"|class="time-grid"|data-grip=/);
+    for (const page of ['overview', 'study', 'career', 'radar', 'insights', 'settings']) {
         await h.click('nav', page);
         assert.match(h.elements['#app'].innerHTML, /<main id="main">/);
         assert.doesNotMatch(h.elements['#app'].innerHTML, /class="banner"/);
     }
-    for (const tab of ['routines', 'calendar', 'today']) {
-        await h.click('mobile', tab);
-        assert.match(h.elements['#app'].innerHTML, new RegExp('data-tab="' + tab + '"'));
-    }
+    await h.click('nav', 'planner');
+    assert.match(h.elements['#app'].innerHTML, /<h1>Overview/);
+});
+test('routine progress measures the exact completed share and keeps skipped, empty and other dates distinct', () => {
+    const state = {occurrences:[], tasks:[{status:'done',category_id:'c',local_date:'2026-11-26'}]};
+    const progress = () => D.categoryDay(state,'2026-11-26','c');
+    assert.deepEqual(progress(),{status:'na',legacy:false,done:0,total:0,progress:0});
+    state.occurrences = ['done','todo','skipped'].map((status,i)=>({id:String(i),local_date:'2026-11-26',category_id:'c',status}));
+    state.occurrences.push({local_date:'2026-11-27',category_id:'c',status:'done'});
+    assert.deepEqual(progress(),{status:'partial',legacy:false,done:1,total:3,progress:1/3});
+    state.occurrences[1].status='done';
+    assert.equal(progress().progress,2/3);
+    state.occurrences[2].status='done';
+    assert.deepEqual(progress(),{status:'solid',legacy:false,done:3,total:3,progress:1});
+    state.occurrences.slice(0,3).forEach(o=>o.status='todo');
+    assert.equal(progress().status,'none');assert.equal(progress().progress,0);
+});
+test('Overview routine checks update only the dated occurrence, refresh statistics and keep disclosure choices',async()=>{
+    const h=dashboardHarness();await h.settle();const day=D.wall(Date.now()).slice(0,10);
+    h.saved.categories=[{id:'c',name:'Preparation',color:'#779977'}];
+    h.saved.routines=[{id:'r',title:'Practice',category_id:'c',active:true,days_of_week:[0,1,2,3,4,5,6]}];
+    h.saved.occurrences=['done','todo','todo'].map((status,i)=>({id:'o'+i,routine_id:'r',local_date:day,title:'Routine '+i,category_id:'c',status}));
+    await h.click('retry');let html=h.elements['#app'].innerHTML;
+    assert.match(html,/role="checkbox"[^>]*aria-checked="false"[^>]*data-do="toggle-occurrence"[^>]*data-id="o1"/);
+    assert.match(html,/--progress:33\.333%/);assert.match(html,/1\/3/);
+    assert.doesNotMatch(html,/data-do="arrange-|data-grip=|data-do="edit-task"/);
+    const target={dataset:{routineGroup:'c'},open:false};h.elements['#app'].contains=node=>node===target;
+    h.listeners.toggle({target});
+    const since=h.requests.length;
+    await h.click('toggle-occurrence','o1');
+    assert.deepEqual(h.requests.slice(since).filter(r=>r.path==='/api/v2/commands').map(r=>[r.body.type,r.body.payload]),[['occurrence.set',{id:'o1',status:'done'}]]);
+    assert.ok(h.requests.slice(since).some(r=>r.path.startsWith('/api/v2/overview?')));
+    assert.match(h.elements['#app'].innerHTML,/<details[^>]*data-routine-group="c"[^>]*>/);
+    assert.doesNotMatch(h.elements['#app'].innerHTML,/<details[^>]*data-routine-group="c"[^>]* open/);
+    h.saved.occurrences.forEach(o=>o.status='done');await h.click('retry');
+    assert.match(h.elements['#app'].innerHTML,/--progress:100\.000%/);assert.match(h.elements['#app'].innerHTML,/3\/3/);
 });
 test('offline start and pause retain operation UUIDs and original effective times', async () => {
     const h = dashboardHarness();
@@ -152,38 +186,19 @@ test('simultaneous reconnect signals deliver the original queued actions in orde
  h.online();h.online();await h.settle();
  assert.deepEqual(h.requests.slice(offset).filter(r=>r.path==='/api/v2/commands').map(r=>r.body.type),['session.start','session.pause']);
 });
-test('captured task drag ignores an unrelated pointer cancellation and posts the snapped destination once',async()=>{
- const h=dashboardHarness();await h.settle();
- const column={dataset:{day:'2026-11-23'},closest:s=>s==='.day-column'?column:{getBoundingClientRect:()=>({top:0,bottom:1440})},getBoundingClientRect:()=>({top:0,height:1440}),append(){}};
- h.context.document.elementFromPoint=()=>column;
- h.context.document.createElement=()=>({style:{}});
- h.context.document.body={classList:{add(){},remove(){}}};
- const grip={dataset:{grip:'task',id:'t'},setPointerCapture(){},closest:s=>s==='[data-grip]'?grip:null};
- const e={pointerId:1,isPrimary:true,target:grip,button:0,clientX:12,clientY:100};
- h.listeners.pointerdown(e);h.listeners.pointermove({...e,clientY:1439});
- h.listeners.pointercancel({...e,pointerId:9});
- await h.listeners.pointerup({...e,clientY:1439});await h.listeners.pointerup({...e,clientY:1439});
- const writes=h.requests.filter(r=>r.path==='/api/v2/commands');
- assert.equal(writes.length,1);
- assert.equal(writes[0].body.payload.start_local,'23:45');assert.equal(writes[0].body.payload.end_date,'2026-11-24');
- assert.equal(writes[0].body.payload.end_local,'00:15');
-});
-test('tracker exposes keyboard details without toggling records and a category timer',async()=>{
+test('routine matrix exposes keyboard details without toggling records',async()=>{
  const h=dashboardHarness();await h.settle();h.saved.categories.push({id:'study',name:'学习',color:'#99aa88'});await h.click('retry');
  assert.match(h.elements['#app'].innerHTML,/data-do="tracker-detail"/);
- assert.match(h.elements['#app'].innerHTML,/data-do="category-timer" data-id="study"/);
  const date=D.wall(Date.now()).slice(0,10);await h.click('tracker-detail',date+'|study');
  assert.match(h.elements['#modal'].innerHTML,/无应做记录/);assert.equal(h.requests.filter(r=>r.path==='/api/v2/commands').length,0);
 });
-test('calendar opens at 09:00 and ignores a hidden grid resetting its scroll',async()=>{
- const h=dashboardHarness();await h.settle();
- const el={isConnected:true,clientHeight:500,scrollTop:0,addEventListener(type,fn){this.onScroll=fn;}};
- h.elements['#app'].querySelector=q=>q==='.grid-scroll'?el:null;
- await h.click('view','week');
- assert.equal(el.scrollTop,576);
- el.scrollTop=1120;el.onScroll();
- el.clientHeight=0;el.scrollTop=0;el.onScroll();await h.click('mobile','today');
- el.clientHeight=500;await h.click('mobile','calendar');assert.equal(el.scrollTop,1120);
+test('overview month navigation and day selection refresh the right date ranges',async()=>{
+ const h=dashboardHarness();await h.settle();await h.click('day','2026-12-07');
+ assert.match(h.elements['#app'].innerHTML,/value="2026-12-07"/);
+ await h.click('next');assert.match(h.elements['#app'].innerHTML,/value="2027-01-01"/);
+ assert.ok(h.requests.some(r=>r.path==='/api/v2/overview?from=2027-01-01&to=2027-01-31'));
+ await h.click('prev');assert.match(h.elements['#app'].innerHTML,/value="2026-12-01"/);
+ assert.equal(h.requests.some(r=>r.path==='/api/v2/commands'),false);
 });
 test('cloud health and private subscription controls stay on the Mac while remote refresh is queued',async()=>{
  const routes={'/api/health-local/summary':{status:'local_only',message:'Available on your Mac.'},'/api/integrations/status':{cloud:true,study:{local_subscription_setup:true}},'/api/study/refresh':{status:'pending'}};
@@ -231,7 +246,7 @@ test('historical category marks retain explicit true and false, while rollout us
  const state={rollout_date:'2026-11-23',category_checks:['2026-11-21','2026-11-22','2026-11-23'].map((day,i)=>({category_id:'a',local_date:day,completed:i!==1})),occurrences:[]};
  assert.deepEqual(D.categoryDay(state,'2026-11-21','a'),{status:'solid',legacy:true});
  assert.deepEqual(D.categoryDay(state,'2026-11-22','a'),{status:'none',legacy:true});
- assert.deepEqual(D.categoryDay(state,'2026-11-23','a'),{status:'na',legacy:false});
+ assert.deepEqual(D.categoryDay(state,'2026-11-23','a'),{status:'na',legacy:false,done:0,total:0,progress:0});
 });
 test('calendar overrides require confirmation for a specific resolvable job and observed token',async()=>{
  const jobs=[{id:'j',title:'My plan',start_at:'2026-11-23T01:00:00Z',end_at:'2026-11-23T02:00:00Z',operation:'upsert',error:'Changed remotely',conflict:{token:'secret-token',title:'Remote edition',start_at:'2026-11-23T02:30:00Z',end_at:'2026-11-23T03:00:00Z'}},{id:'k',title:'Another task',operation:'upsert',error:'Missing calendar'}];
@@ -301,13 +316,13 @@ test('missing cloud cache leaves local health accessible without fabricating pla
  await h.settle();assert.match(h.elements['#app'].innerHTML,/打开本机健康记录/);await h.click('open-local-health');
  assert.match(h.elements['#app'].innerHTML,/data-do="checkin"/);assert.doesNotMatch(h.elements['#app'].innerHTML,/class="dashboard"/);
 });
-test('partial dots expose the visible done/due ratio, page navigation resets window scroll without changing calendar scroll',async()=>{
+test('partial dots expose the visible done/due ratio and page navigation resets window scroll',async()=>{
  const h=dashboardHarness();await h.settle();const day=D.wall(Date.now()).slice(0,10);
  h.saved.categories.push({id:'c',name:'Reading',color:'#779977'});
  h.saved.occurrences=['done','done','todo'].map((status,i)=>({id:'o'+i,local_date:day,category_id:'c',title:'r'+i,status}));
- await h.click('retry');assert.match(h.elements['#app'].innerHTML,/<small>2\/3<\/small>/);
+ await h.click('retry');assert.match(h.elements['#app'].innerHTML,/<small>2\/3 已完成<\/small>/);
  let resets=0;h.context.window.scrollTo=({top})=>{if(top===0)resets++;};
- await h.click('nav','overview');await h.click('nav','planner');assert.equal(resets,2);
+ await h.click('nav','career');await h.click('nav','overview');assert.equal(resets,2);
 });
 test('Career shows recent digest jobs then nearest scheduled followups then application history, and timestamps describe each source',async()=>{
  const h=dashboardHarness();await h.settle();
@@ -346,7 +361,7 @@ test('Career separates recommendations, upcoming followups and progress without 
  assert.ok(groups.every(g=>!g.open),'Groups should initially show a compact overview.');
  assert.doesNotMatch(h.elements['#app'].innerHTML,/Hidden news/);
 });
-test('Career disclosure choices survive task actions, navigation and reload independently without writing planner records',async()=>{
+test('Career disclosure choices survive refresh, navigation and reload without offering hidden local tasks',async()=>{
  const h=dashboardHarness();await h.settle();await h.click('nav','career');
  assert.equal(careerSections(h.elements['#app'].innerHTML).length,3);
  const toggle=(id,open,attached=true)=>{
@@ -358,8 +373,8 @@ test('Career disclosure choices survive task actions, navigation and reload inde
  toggle('opportunities',true);toggle('followups',true);toggle('opportunities',false);
  toggle('progress',true,false); // A queued event from a replaced DOM must not change the saved choice.
  assert.equal(writes().length,0);
- await h.click('external-task','job-to-plan');
- assert.deepEqual(writes().map(r=>[r.body.type,r.body.payload.id]),[['external.add_task','job-to-plan']]);
+ await h.click('retry');
+ assert.equal(writes().length,0);assert.doesNotMatch(h.elements['#app'].innerHTML,/data-do="external-task"/);
  assert.deepEqual(careerSections(h.elements['#app'].innerHTML).map(g=>g.open),[false,true,false]);
  await h.click('nav','planner');await h.click('nav','career');
  assert.deepEqual(careerSections(h.elements['#app'].innerHTML).map(g=>g.open),[false,true,false]);

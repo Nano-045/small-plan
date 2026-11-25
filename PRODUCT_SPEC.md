@@ -1,22 +1,22 @@
 # Small Plan · Life dashboard specification
 
-Approved 2026-11-23. This supersedes [the archived v1 specification](docs/PRODUCT_SPEC_v1.md): selected Apple Calendar reads are now allowed, and future category completion derives from dated routines rather than independent manual category toggles.
+Approved 2026-11-23; Overview-first interface updated 2026-11-25. This supersedes [the archived v1 specification](docs/PRODUCT_SPEC_v1.md): selected Apple Calendar reads are now allowed, and future category completion derives from dated routines rather than independent manual category toggles.
 
 ## Product boundaries
 
-A calendar-centered personal workspace for planning, execution, actual time and review. Single user, Monday weeks, Australia/Melbourne with DST. Core features require no AI or paid service. Scheduling suggestions need confirmation. Stop saves time separately from completing a task.
+A personal life overview for routines, actual time and review. Daily task management and scheduling are handled in Reminders / Apple Calendar; the Planner screen is retired. Single user, Monday weeks, Australia/Melbourne with DST. Core features require no AI or paid service. Scheduling suggestions need confirmation. Stop saves time separately from completing a task.
 
 External calendars selected by the user are read-only. Only app-owned events in `Small Plan · Plan` and `Small Plan · Actual` may be written. Health samples, self-reports, aggregates and inferences remain local. Career-ops remains application source of truth and sole existing digest/email workflow.
 
 ## Interface and behavior
 
-- Left Focus/Todo/deadlines, center day/week/month calendar, right grouped routines and Weekly Tracker. Persistent timer and sync state.
-- Small-screen Today/Calendar/Routines tabs. Separate Overview, Study, Career, Radar, local Insights and Settings.
-- Visible drag handles and keyboard-accessible Arrange forms. Full 24h, multiple task blocks, cross-midnight, 15-minute pointer snapping and exact minute forms.
-- RoutineOccurrence snapshots the day's title/category/requirements. None completed: hollow; partial: progress; all nonempty due items: solid; no due: dash. Skipped is not done. Tasks are excluded. Category dots open detail, never mass-complete children.
+- Overview is the default home. Collapsible routine categories show the exact completed share and accessible per-occurrence checkboxes; checkboxes remain local to Small Plan, independent of Reminders.
+- Responsive Overview, Study, Career, Radar, local Insights and Settings. Persistent optional timer and sync state.
+- No Planner, Todo editor, drag scheduling, scheduling-suggestion button or source-to-task button is presented. Existing records and backend/export contracts are retained. Finite study sequences use explicit dated occurrences without generating repeats after the final day.
+- RoutineOccurrence snapshots the day's title/category/requirements. None completed: hollow; partial: progress proportional to done / due; all nonempty due items: solid; no due: dash. Skipped is not done. Tasks are excluded. Category dots open detail, never mass-complete children.
 - Template, schedule and category changes preserve past snapshots. Repeated placement updates the same routine occurrence's plan. Pre-migration category checks remain read-only legacy history.
 - One running/paused timer, stable operation IDs, persisted timestamps and disconnected replay. Actual segments exclude pauses. Stop does not mark complete. Long sessions need review before statistics/export.
-- Overview uses actual records for 10-minute cells, category shares, daily/weekly trends and month comparisons. Planned totals stay separate. Unrecorded time is not labeled rest or waste.
+- Overview uses actual records for 10-minute cells, category shares, daily/weekly trends and month comparisons. Historical planned totals stay separate. External calendar plans are not automatically counted as actual activity. Unrecorded time is not labeled rest or waste.
 
 ## Architecture and integrity
 

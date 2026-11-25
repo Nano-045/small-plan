@@ -150,7 +150,9 @@ const LifeDomain = (() => {
             const check=(state.category_checks||[]).find(r=>r.local_date===day && r.category_id===category);
             return {status:check ? (check.completed ? 'solid' : 'none') : 'na',legacy:true};
         }
-        return {status:dot(state.occurrences,day,category),legacy:false};
+        const due=state.occurrences.filter(r=>r.local_date===day && (r.category_id||null)===(category||null));
+        const done=due.filter(r=>r.status==='done').length;
+        return {status:dot(due,day,category),legacy:false,done,total:due.length,progress:due.length?done/due.length:0};
     }
     return { radarTopics, radarPicks, trend, categoryDay, lanes, projectTimer, wall, timezone, week, month, midnight, add, minutes, clock, slot, actual, dot };
 })();
